@@ -41,6 +41,14 @@ RUN mkdir -p storage/logs \
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
+# Pastas que precisam de sobreviver aos redeploys. No Dokploy, em
+# Advanced > Volumes/Mounts, crie um Volume Mount para cada uma:
+#   joao-storage-public -> /var/www/html/storage/app/public  (fotos dos imóveis)
+#   joao-passport       -> /var/www/html/storage/oauth       (chaves do Passport)
+# Sem o mount, o Docker cria um volume anónimo novo a cada deploy e os
+# ficheiros perdem-se.
+VOLUME ["/var/www/html/storage/app/public", "/var/www/html/storage/oauth"]
+
 EXPOSE 8048
 
 CMD ["/usr/local/bin/start.sh"]

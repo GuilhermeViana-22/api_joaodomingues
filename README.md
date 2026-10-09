@@ -83,7 +83,15 @@ A API fica em `https://apijoaodomingues.guilhermeviana.com`.
 
 1. Crie um serviço **Docker Compose** a apontar para este repositório (`docker-compose.yml`, sem o `.local`).
 2. Em **Domains**: `apijoaodomingues.guilhermeviana.com`, serviço `api`, porta `8048`, HTTPS com Let's Encrypt.
-3. Em **Environment**:
+3. Em **Advanced > Volumes/Mounts**, um *Volume Mount* para cada pasta (também declaradas com `VOLUME` no `Dockerfile`):
+
+| Volume Name | Mount Path | Conteúdo |
+|---|---|---|
+| `joao-storage-public` | `/var/www/html/storage/app/public` | fotos dos imóveis |
+| `joao-passport` | `/var/www/html/storage/oauth` | chaves do Passport |
+
+   Sem eles, cada deploy apaga as fotos e obriga toda a gente a entrar de novo.
+4. Em **Environment**:
 
 ```env
 APP_NAME="Joao Domingues Imobiliario"
