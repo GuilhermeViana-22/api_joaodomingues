@@ -65,18 +65,49 @@ Com `php artisan serve`, a API fica em `http://localhost:8000`. No Docker, fica 
 
 O `Dockerfile` e o `docker-compose.yml` seguem o da API do Arquiteto Online, reduzidos ao que esta API usa: PHP 8.3, MySQL 8.4 e a fila na base de dados. Não há Octane, RoadRunner nem Redis.
 
+Local (sobe um MySQL próprio, publica as portas 8048 e 3348 e usa http):
+
 ```bash
 cp .env.example .env
-# Preencha APP_KEY (php artisan key:generate --show), DB_DATABASE, DB_USERNAME e DB_PASSWORD.
-# No Compose, DB_HOST passa a ser o serviço mysql.
-docker compose up -d --build
-docker compose exec api php artisan db:seed
-docker compose exec api php artisan admin:criar --nome="João Domingues" --email="jmdomingues@remax.pt" --senha="uma-senha-longa"
+# Preencha APP_KEY (php artisan key:generate --show) e DB_PASSWORD.
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 ```
 
-O contentor corre as migrations e o `passport:preparar` ao arrancar, e deixa um `queue:work` em segundo plano para o e-mail dos leads. As fotos ficam no volume `joao-storage-public`.
+O contentor corre as migrations e o `passport:preparar` ao arrancar e deixa um `queue:work` em segundo plano para o e-mail dos leads. Na primeira vez, com a base vazia, carrega os textos do site (PT, EN, FR, ES) e os contactos/redes. Em todos os arranques corre o `UtilizadoresSeeder`, que cria os 3 utilizadores do painel que ainda não existam (a senha vem de `SEED_SENHA_*`; sem ela, é gerada e mostrada uma vez no log). O comando `admin:criar` continua disponível para contas extra.
 
-`db:seed` carrega os textos actuais do site (PT, EN, FR, ES) e os contactos/redes que já estão em `web/js/config.js`. Não cria utilizador nem imóveis. O primeiro administrador só existe pelo comando `admin:criar`. Senhas óbvias (`admin123`, `password`, …) são recusadas. Não há senha por omissão no código.
+Volumes: `joao-mysql` (base), `joao-storage-public` (fotos dos imóveis) e `joao-passport` (chaves do Passport; sem ele, cada deploy obrigaria a entrar de novo).
+
+### Produção (Dokploy)
+
+A API fica em `https://apijoaodomingues.guilhermeviana.com`.
+
+1. Crie um serviço **Docker Compose** a apontar para este repositório (`docker-compose.yml`, sem o `.local`).
+2. Em **Domains**: `apijoaodomingues.guilhermeviana.com`, serviço `api`, porta `8048`, HTTPS com Let's Encrypt.
+3. Em **Environment**:
+
+```env
+APP_NAME="Joao Domingues Imobiliario"
+APP_KEY=base64:...                 # php artisan key:generate --show
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://apijoaodomingues.guilhermeviana.com
+APP_TIMEZONE=Europe/Lisbon
+APP_LOCALE=pt
+LOG_CHANNEL=stderr
+DATABASE_URL=mysql://utilizador:senha@host-interno-do-mysql-no-dokploy:3306/base
+FRONTEND_URL=https://joaodomingues.vercel.app
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+FILESYSTEM_DISK=public
+MAIL_MAILER=smtp                   # e MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_ADDRESS
+LEADS_NOTIFICATION_EMAIL=jmdomingues@remax.pt
+SEED_SENHA_ADMIN=...
+SEED_SENHA_SUPORTE=...
+SEED_SENHA_EDITOR=...
+```
+
+O HTTPS termina no Traefik do Dokploy; a API confia nos cabeçalhos `X-Forwarded-*` (`trustProxies`), por isso as URLs das fotos saem em `https://`. Nenhuma porta é publicada no host. A base é o MySQL criado no Dokploy: copie o *Internal Connection URL* para `DATABASE_URL` (o compose de produção não sobe MySQL; o `docker-compose.local.yml` sobe um para a máquina local).
 
 Enquanto a base não tiver imóveis publicados, o site continua a mostrar os de `web/js/imoveis-dados.js`.
 

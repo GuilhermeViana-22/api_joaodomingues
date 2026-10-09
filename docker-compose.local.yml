@@ -1,0 +1,37 @@
+# Só para a máquina local: MySQL próprio, portas publicadas e endereços http.
+# docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+services:
+  api:
+    container_name: joao-domingues-api
+    ports:
+      - "${API_PORT:-8048}:8048"
+    environment:
+      APP_URL: http://localhost:8048
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DATABASE_URL: "mysql://joao:${DB_PASSWORD:-secret}@mysql:3306/${DB_DATABASE:-joao_domingues}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.4
+    container_name: joao-domingues-mysql
+    ports:
+      - "${FORWARD_DB_PORT:-3348}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-secret}"
+      MYSQL_DATABASE: "${DB_DATABASE:-joao_domingues}"
+      MYSQL_USER: joao
+      MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - joao-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
+      retries: 5
+      timeout: 5s
+      interval: 10s
+    restart: unless-stopped
+
+volumes:
+  joao-mysql:

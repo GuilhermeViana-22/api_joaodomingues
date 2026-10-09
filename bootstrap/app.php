@@ -19,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Atrás do Traefik (Dokploy) o HTTPS termina no proxy: sem isto o
+        // asset() das fotos sai em http:// e o site em https bloqueia-as.
+        $middleware->trustProxies(at: '*');
+
         $middleware->api(prepend: [
             ForcarJson::class,
         ]);

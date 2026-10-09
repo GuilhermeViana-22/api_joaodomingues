@@ -14,3 +14,4 @@ storage/framework/views/*
 tests
 phpunit.xml
 storage/*.key
+storage/oauth/*

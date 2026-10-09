@@ -12,6 +12,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Pasta própria para as chaves, montada num volume no Docker.
+        Passport::loadKeysFrom(storage_path('oauth'));
+
         // O painel espera o imóvel/lista em bruto, sem a chave "data" do Laravel.
         JsonResource::withoutWrapping();
 

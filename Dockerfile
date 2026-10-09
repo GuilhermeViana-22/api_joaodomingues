@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile Laravel API — João Domingues
+# Dockerfile da API Laravel: João Domingues
 # Baseado no da API do Arquiteto Online, sem Octane/RoadRunner/Redis:
 # esta API usa PHP 8.3, MySQL e fila em base de dados.
 # =============================================================================
@@ -8,39 +8,16 @@ FROM php:8.3-cli-alpine
 LABEL maintainer="API - Joao Domingues"
 LABEL description="API Laravel - Joao Domingues Imobiliario"
 
-RUN apk add --no-cache \
-    bash \
-    curl \
-    git \
-    mysql-client \
-    libpng-dev \
-    libzip-dev \
-    zip \
-    unzip \
-    oniguruma-dev \
-    libxml2-dev \
-    icu-dev \
-    freetype-dev \
-    libjpeg-turbo-dev
+# A imagem base já traz tudo o que o composer.lock exige (mbstring, xml,
+# dom, curl, openssl, sodium, ...). Só faltam pdo_mysql (base de dados) e
+# pcntl (timeouts do queue:work). bash corre o start.sh, curl o healthcheck
+# e unzip extrai os pacotes do Composer.
+RUN apk add --no-cache bash curl unzip \
+    && docker-php-ext-install -j$(nproc) pdo_mysql pcntl
 
-RUN docker-php-ext-configure gd \
-    --with-freetype \
-    --with-jpeg
+RUN printf "memory_limit=256M\nupload_max_filesize=10M\npost_max_size=12M\nexpose_php=Off\n" > /usr/local/etc/php/conf.d/app.ini
 
-RUN docker-php-ext-install -j$(nproc) \
-    pdo_mysql \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    zip \
-    xml \
-    intl
-
-RUN echo "memory_limit=256M" > /usr/local/etc/php/conf.d/memory-limit.ini
-
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
@@ -57,6 +34,7 @@ RUN mkdir -p storage/logs \
     storage/framework/sessions \
     storage/framework/views \
     storage/app/public \
+    storage/oauth \
     bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
