@@ -6,7 +6,7 @@ use App\Mail\NovoPedidoMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
-use Laravel\Sanctum\Sanctum;
+use Laravel\Passport\Passport;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -17,7 +17,7 @@ class PedidoTest extends TestCase
     public function test_recebe_pedido_e_envia_email(): void
     {
         Mail::fake();
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
         $id = $this->postJson('/api/v1/imoveis', [
             'titulo' => 'Apartamento em Benfica',
             'tipologia' => 'T2',
@@ -39,14 +39,28 @@ class PedidoTest extends TestCase
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
             'telefone' => '+351 910 000 000',
+            'objetivo' => 'Vender o meu imóvel',
+            'tipoImovel' => 'Apartamento',
+            'tipologia' => 'T2',
+            'zona' => 'Benfica, Lisboa',
+            'prazo' => 'Nos próximos meses',
             'mensagem' => 'Gostava de vender.',
             'imovelId' => $id,
             'consentimento' => 'sim',
+            'website' => '',
         ])->assertCreated()->assertJsonStructure(['id', 'message']);
 
         $this->assertDatabaseHas('pedidos', [
             'email' => 'maria@email.pt',
+            'telefone' => '+351 910 000 000',
+            'objetivo' => 'Vender o meu imóvel',
+            'tipo_imovel' => 'Apartamento',
+            'tipologia' => 'T2',
+            'zona' => 'Benfica, Lisboa',
+            'prazo' => 'Nos próximos meses',
+            'mensagem' => 'Gostava de vender.',
             'imovel_id' => $id,
+            'consentimento' => true,
             'status' => 'novo',
             'email_estado' => 'enviado',
         ]);
@@ -94,7 +108,7 @@ class PedidoTest extends TestCase
 
         $this->getJson('/api/v1/pedidos')->assertUnauthorized();
 
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'editor']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'editor']));
 
         $id = $this->getJson('/api/v1/pedidos?q=maria@email.pt')->assertOk()->json('0.id');
 
@@ -116,7 +130,7 @@ class PedidoTest extends TestCase
 
         $this->putJson('/api/v1/textos', [])->assertUnauthorized();
 
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'editor']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'editor']));
 
         $textos = $this->getJson('/api/v1/textos')->json();
         $textos['pt']['hero']['eyebrow'] = 'Consultor em Lisboa';

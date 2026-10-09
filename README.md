@@ -19,7 +19,7 @@ A listagem do painel espera um **array JSON**, não o formato `{ data, links, me
 ## Arquitectura
 
 - Laravel 12, PHP 8.2, MySQL ou MariaDB, Eloquent.
-- API em `/api/v1`. Autenticação do painel com **Laravel Sanctum** (token Bearer). Não há cookies de sessão na API, por isso o CSRF do browser não se aplica a estes pedidos. O token vai no cabeçalho `Authorization`.
+- API em `/api/v1`. Autenticação do painel com **Laravel Passport**: o login valida o e-mail e a senha e devolve um token de acesso pessoal. As rotas protegidas validam esse token no guarda `api` do Passport (`Authorization: Bearer`). Não há cookies de sessão na API, por isso o CSRF do browser não se aplica a estes pedidos.
 - Perfis iguais aos do painel: `administrador` (tudo) e `editor` (dashboard, imóveis, textos, pedidos). `permissoes` no utilizador, se estiver preenchido, substitui o perfil.
 - Imóveis e pedidos usam exclusão lógica. Um imóvel apagado no painel deixa de aparecer, mas o contacto que o referia conserva o `imovel_id`.
 - O pedido é gravado **antes** do e-mail. O envio corre num job (`NotificarNovoPedido`). Se o SMTP falhar, o contacto fica na base com `email_estado=falhou` e o erro vai para o log, sem o nome do visitante.
@@ -52,6 +52,7 @@ DB_PASSWORD=...
 
 ```bash
 php8.2 artisan migrate
+php8.2 artisan passport:preparar
 php8.2 artisan db:seed
 php8.2 artisan storage:link
 php8.2 artisan admin:criar --nome="João Domingues" --email="jmdomingues@remax.pt" --senha="uma-senha-longa"
@@ -73,7 +74,7 @@ docker compose exec api php artisan db:seed
 docker compose exec api php artisan admin:criar --nome="João Domingues" --email="jmdomingues@remax.pt" --senha="uma-senha-longa"
 ```
 
-O contentor corre as migrations ao arrancar e deixa um `queue:work` em segundo plano para o e-mail dos leads. As fotos ficam no volume `joao-storage-public`.
+O contentor corre as migrations e o `passport:preparar` ao arrancar, e deixa um `queue:work` em segundo plano para o e-mail dos leads. As fotos ficam no volume `joao-storage-public`.
 
 `db:seed` carrega os textos actuais do site (PT, EN, FR, ES) e os contactos/redes que já estão em `web/js/config.js`. Não cria utilizador nem imóveis. O primeiro administrador só existe pelo comando `admin:criar`. Senhas óbvias (`admin123`, `password`, …) são recusadas. Não há senha por omissão no código.
 

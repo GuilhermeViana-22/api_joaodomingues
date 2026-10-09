@@ -28,7 +28,7 @@ class AuthController extends Controller
         }
 
         $utilizador->forceFill(['ultimo_acesso' => now()])->save();
-        $token = $utilizador->createToken('painel')->plainTextToken;
+        $token = $utilizador->createToken('painel')->accessToken;
 
         return response()->json([
             'token' => $token,
@@ -43,9 +43,9 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->user()?->currentAccessToken();
-        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
-            $token->delete();
+        $token = $request->user()?->token();
+        if ($token !== null && method_exists($token, 'revoke')) {
+            $token->revoke();
         }
 
         return response()->json(['message' => 'Sessão terminada.']);
@@ -82,7 +82,7 @@ class AuthController extends Controller
             ],
             function (User $utilizador, string $senha) {
                 $utilizador->forceFill(['password' => $senha])->save();
-                $utilizador->tokens()->delete();
+                $utilizador->tokens()->update(['revoked' => true]);
             }
         );
 

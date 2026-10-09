@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Laravel\Sanctum\Sanctum;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class ImovelTest extends TestCase
@@ -16,7 +16,7 @@ class ImovelTest extends TestCase
 
     public function test_cria_edita_e_apaga_imovel(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
 
         $criado = $this->postJson('/api/v1/imoveis', $this->dados())->assertCreated();
         $id = $criado->json('id');
@@ -35,7 +35,7 @@ class ImovelTest extends TestCase
 
     public function test_recusa_campos_obrigatorios(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
 
         $this->postJson('/api/v1/imoveis', ['titulo' => 'Oi'])
             ->assertUnprocessable()
@@ -44,7 +44,7 @@ class ImovelTest extends TestCase
 
     public function test_publico_nao_ve_rascunhos_e_admin_ve(): void
     {
-        Sanctum::actingAs($admin = User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs($admin = User::factory()->create(['perfil' => 'administrador']));
         $this->postJson('/api/v1/imoveis', $this->dados(['publicado' => true, 'referencia' => 'JD-001']))->assertCreated();
         $this->postJson('/api/v1/imoveis', $this->dados([
             'publicado' => false,
@@ -61,14 +61,14 @@ class ImovelTest extends TestCase
 
         $this->getJson('/api/v1/imoveis/jd-002')->assertNotFound();
 
-        Sanctum::actingAs($admin);
+        Passport::actingAs($admin);
         $this->getJson('/api/v1/imoveis')->assertOk()->assertJsonCount(2);
         $this->getJson('/api/v1/imoveis/jd-002')->assertOk()->assertJsonPath('publicado', false);
     }
 
     public function test_filtra_e_pagina(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
         $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-001', 'zona' => 'Benfica, Lisboa', 'preco' => 200000]));
         $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-002', 'zona' => 'Cascais', 'preco' => 900000, 'tipo' => 'Moradia']));
 
@@ -84,7 +84,7 @@ class ImovelTest extends TestCase
 
     public function test_publicar_exige_foto_e_destaque_so_lista_publicados(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
         $id = $this->postJson('/api/v1/imoveis', $this->dados([
             'publicado' => false,
             'imagens' => [],
@@ -106,7 +106,7 @@ class ImovelTest extends TestCase
     public function test_upload_rejeita_ficheiro_invalido_e_aceita_imagem(): void
     {
         Storage::fake('public');
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
 
         $this->post('/api/v1/imagens', [
             'foto' => UploadedFile::fake()->create('notas.pdf', 20, 'application/pdf'),
@@ -122,7 +122,7 @@ class ImovelTest extends TestCase
 
     public function test_excluir_imovel_com_pedido_preserva_o_contacto(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
         $id = $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-004']))->json('id');
 
         $this->postJson('/api/v1/pedidos', [

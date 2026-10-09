@@ -13,3 +13,4 @@ storage/framework/sessions/*
 storage/framework/views/*
 tests
 phpunit.xml
+storage/*.key

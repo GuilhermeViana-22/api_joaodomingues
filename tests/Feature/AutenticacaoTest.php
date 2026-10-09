@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Sanctum\Sanctum;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class AutenticacaoTest extends TestCase
@@ -28,6 +28,16 @@ class AutenticacaoTest extends TestCase
             ->assertJsonPath('utilizador.email', 'joao@joaodomingues.pt')
             ->assertJsonPath('utilizador.nome', $user->name)
             ->assertJsonStructure(['token', 'utilizador' => ['id', 'perfil', 'ativo']]);
+
+        $this->assertDatabaseHas('oauth_access_tokens', [
+            'user_id' => $user->id,
+            'revoked' => false,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$resposta->json('token'))
+            ->getJson('/api/v1/auth/me')
+            ->assertOk()
+            ->assertJsonPath('email', 'joao@joaodomingues.pt');
     }
 
     public function test_login_recusa_senha_errada_e_conta_inactiva(): void
@@ -58,7 +68,7 @@ class AutenticacaoTest extends TestCase
 
     public function test_editor_nao_gere_utilizadores(): void
     {
-        Sanctum::actingAs(User::factory()->create(['perfil' => 'editor']));
+        Passport::actingAs(User::factory()->create(['perfil' => 'editor']));
 
         $this->getJson('/api/v1/utilizadores')->assertForbidden();
         $this->putJson('/api/v1/definicoes', [])->assertForbidden();
@@ -67,13 +77,16 @@ class AutenticacaoTest extends TestCase
     public function test_logout_revoga_o_token(): void
     {
         $user = User::factory()->create(['perfil' => 'administrador']);
-        $token = $user->createToken('painel')->plainTextToken;
+        $token = $user->createToken('painel')->accessToken;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/auth/logout')
             ->assertOk();
 
-        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->assertDatabaseHas('oauth_access_tokens', [
+            'user_id' => $user->id,
+            'revoked' => true,
+        ]);
 
         $this->app['auth']->forgetGuards();
 

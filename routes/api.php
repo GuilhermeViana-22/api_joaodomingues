@@ -31,7 +31,7 @@ Route::prefix('v1')->group(function () {
     Route::post('pedidos', [PedidoController::class, 'store'])->middleware('throttle:pedidos');
     Route::post('contact', [PedidoController::class, 'store'])->middleware('throttle:pedidos');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware('auth:api')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
 
         Route::middleware('ativo')->group(function () {
