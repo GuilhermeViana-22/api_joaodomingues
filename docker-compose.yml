@@ -1,0 +1,60 @@
+# Subir: docker compose up -d --build
+# Migrations correm no arranque do contentor (start.sh).
+# O volume joao-storage-public guarda as fotos dos imóveis.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: joao-domingues-api
+    container_name: joao-domingues-api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+    volumes:
+      - joao-storage-public:/var/www/html/storage/app/public
+    networks:
+      - joao-domingues-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    container_name: joao-domingues-mysql
+    ports:
+      - "${FORWARD_DB_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-secret}"
+      MYSQL_DATABASE: "${DB_DATABASE:-joao_domingues}"
+      MYSQL_USER: "${DB_USERNAME:-joao}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - joao-mysql:/var/lib/mysql
+    networks:
+      - joao-domingues-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-p${DB_PASSWORD:-secret}"]
+      retries: 5
+      timeout: 5s
+      interval: 10s
+    restart: unless-stopped
+
+networks:
+  joao-domingues-network:
+    driver: bridge
+
+volumes:
+  joao-mysql:
+    driver: local
+  joao-storage-public:
+    driver: local
