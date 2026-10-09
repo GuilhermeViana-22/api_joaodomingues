@@ -18,4 +18,4 @@ php artisan migrate --force --no-interaction
     done
 ) &
 
-exec php artisan serve --host=0.0.0.0 --port=8000
+exec php artisan serve --host=0.0.0.0 --port=8048

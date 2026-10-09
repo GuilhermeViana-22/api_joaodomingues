@@ -58,7 +58,7 @@ php8.2 artisan admin:criar --nome="João Domingues" --email="jmdomingues@remax.p
 php8.2 artisan serve
 ```
 
-A API fica em `http://localhost:8000`. O painel e o site usam `http://localhost:8000/api/v1`.
+Com `php artisan serve`, a API fica em `http://localhost:8000`. No Docker, fica em `http://localhost:8048`. O painel e o site usam esse endereço com `/api/v1` no fim.
 
 ## Docker
 
@@ -84,7 +84,7 @@ Enquanto a base não tiver imóveis publicados, o site continua a mostrar os de 
 `admin/.env.local`:
 
 ```dotenv
-VITE_API_URL=http://localhost:8000/api/v1
+VITE_API_URL=http://localhost:8048/api/v1
 ```
 
 Reinicie o `npm run dev`. Sem esta variável o painel continua na API simulada do browser.
@@ -92,7 +92,7 @@ Reinicie o `npm run dev`. Sem esta variável o painel continua na API simulada d
 `web/js/config.js`:
 
 ```javascript
-window.API_URL = "http://localhost:8000/api/v1";
+window.API_URL = "http://localhost:8048/api/v1";
 ```
 
 O site estático não lê variáveis da Vercel em tempo de execução. Em produção, grave este endereço no `config.js` antes do deploy (ou substitua o ficheiro no build). O painel, esse sim, recebe `VITE_API_URL` nas variáveis de ambiente da Vercel, porque o Vite embute o valor no build.

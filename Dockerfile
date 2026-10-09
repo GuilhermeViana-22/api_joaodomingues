@@ -63,6 +63,6 @@ RUN mkdir -p storage/logs \
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
-EXPOSE 8000
+EXPOSE 8048
 
 CMD ["/usr/local/bin/start.sh"]
