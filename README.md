@@ -73,7 +73,7 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 ```
 
-O contentor corre as migrations e o `passport:preparar` ao arrancar e deixa um `queue:work` em segundo plano para o e-mail dos leads. Na primeira vez, com a base vazia, carrega os textos do site (PT, EN, FR, ES) e os contactos/redes. Em todos os arranques corre o `UtilizadoresSeeder`, que cria os 3 utilizadores do painel que ainda não existam (a senha vem de `SEED_SENHA_*`; sem ela, é gerada e mostrada uma vez no log). O comando `admin:criar` continua disponível para contas extra.
+O contentor corre as migrations e o `passport:preparar` ao arrancar e deixa um `queue:work` em segundo plano para o e-mail dos leads. Na primeira vez, com a base vazia, carrega os textos do site (PT, EN, FR, ES) e os contactos/redes. Em todos os arranques corre o `UtilizadoresSeeder`, que cria os 3 utilizadores do painel que ainda não existam e repõe a senha fixa (12 caracteres, definida no seeder) dos que já existem. O comando `admin:criar` continua disponível para contas extra.
 
 Volumes: `joao-mysql` (base), `joao-storage-public` (fotos dos imóveis) e `joao-passport` (chaves do Passport; sem ele, cada deploy obrigaria a entrar de novo).
 
@@ -110,9 +110,6 @@ QUEUE_CONNECTION=database
 FILESYSTEM_DISK=public
 MAIL_MAILER=smtp                   # e MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_ADDRESS
 LEADS_NOTIFICATION_EMAIL=jmdomingues@remax.pt
-SEED_SENHA_ADMIN=...
-SEED_SENHA_SUPORTE=...
-SEED_SENHA_EDITOR=...
 ```
 
 O HTTPS termina no Traefik do Dokploy; a API confia nos cabeçalhos `X-Forwarded-*` (`trustProxies`), por isso as URLs das fotos saem em `https://`. Nenhuma porta é publicada no host. A base é o MySQL criado no Dokploy: copie o *Internal Connection URL* para `DATABASE_URL` (o compose de produção não sobe MySQL; o `docker-compose.local.yml` sobe um para a máquina local).

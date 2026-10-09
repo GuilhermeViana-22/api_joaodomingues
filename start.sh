@@ -27,4 +27,4 @@ php artisan db:seed --class=UtilizadoresSeeder --force --no-interaction
     done
 ) &
 
-exec php artisan serve --host=0.0.0.0 --port=8048
+exec php artisan serve --host=0.0.0.0 --port=8048 --no-reload
