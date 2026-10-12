@@ -55,7 +55,10 @@ class ImovelService
 
         $this->repetirTraducaoSeFaltar($imovel);
 
-        return $imovel->load('imagens');
+        // refresh(): o create() não traz os valores por defeito da base
+        // (finalidade "venda", moeda "EUR", país...). Sem isto a resposta saía
+        // com null nesses campos e o painel reenviava-os na edição seguinte.
+        return $imovel->refresh()->load('imagens');
     }
 
     public function atualizar(Imovel $imovel, array $dados): Imovel
@@ -241,10 +244,18 @@ class ImovelService
             'ordem' => 'ordem',
         ];
 
+        // Colunas NOT NULL com valor por defeito: um null aqui daria erro SQL,
+        // por isso null quer dizer "deixar como está" (ou o defeito, se novo)
+        $semNull = ['finalidade', 'moeda', 'pais', 'destaque', 'ordem'];
+
         foreach ($opcionais as $entrada => $coluna) {
-            if (array_key_exists($entrada, $dados)) {
-                $base[$coluna] = $dados[$entrada];
+            if (! array_key_exists($entrada, $dados)) {
+                continue;
             }
+            if ($dados[$entrada] === null && in_array($coluna, $semNull, true)) {
+                continue;
+            }
+            $base[$coluna] = $dados[$entrada];
         }
 
         return $base;

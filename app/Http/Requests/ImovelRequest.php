@@ -26,6 +26,15 @@ class ImovelRequest extends FormRequest
             $this->merge(['referencia' => $ref === '' ? null : $ref]);
         }
 
+        // Campos que o painel não edita mas que podem vir a null (ex.: de uma
+        // resposta antiga da API): null = "não mexer", em vez de recusar o imóvel
+        foreach (['finalidade', 'moeda', 'pais', 'destaque', 'ordem'] as $campo) {
+            if ($this->has($campo) && $this->input($campo) === null) {
+                $this->request->remove($campo);
+                $this->json()->remove($campo);
+            }
+        }
+
         // Linhas de destaque em branco são descartadas (o ConvertEmptyStringsToNull
         // transforma-as em null e a regra "string" recusava o imóvel inteiro)
         if (is_array($this->input('destaques'))) {
@@ -135,6 +144,17 @@ class ImovelRequest extends FormRequest
             'imagens.*.max' => 'Endereço de foto demasiado longo. Envie a foto outra vez.',
 
             'publicado.boolean' => 'Valor de publicação inválido.',
+
+            'finalidade.in' => 'Finalidade inválida. Use venda ou arrendamento.',
+            'moeda.string' => 'Moeda inválida. Use um código de 3 letras (ex.: EUR).',
+            'moeda.size' => 'Moeda inválida. Use um código de 3 letras (ex.: EUR).',
+            'areaTotal.integer' => 'A área total tem de ser um número inteiro.',
+            'areaTotal.min' => 'A área total tem de ser maior que zero.',
+            'vagas.integer' => 'O número de lugares de garagem tem de ser inteiro.',
+            'vagas.min' => 'O número de lugares de garagem não pode ser negativo.',
+            'destaque.boolean' => 'Valor de destaque inválido.',
+            'ordem.integer' => 'A ordem tem de ser um número inteiro.',
+            'ordem.min' => 'A ordem não pode ser negativa.',
         ];
     }
 }

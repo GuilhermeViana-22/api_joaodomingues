@@ -18,6 +18,8 @@ class ImovelTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const JPEG_1X1 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
     public function test_cria_edita_e_apaga_imovel(): void
     {
         Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
@@ -117,7 +119,8 @@ class ImovelTest extends TestCase
         ])->assertUnprocessable();
 
         $url = $this->post('/api/v1/imagens', [
-            'foto' => UploadedFile::fake()->image('fachada.jpg'),
+            // JPEG 1x1 real: não precisa da extensão GD (ausente na imagem Docker)
+            'foto' => UploadedFile::fake()->createWithContent('fachada.jpg', base64_decode(self::JPEG_1X1)),
         ])->assertCreated()->json('url');
 
         $caminho = 'imoveis/'.basename((string) parse_url($url, PHP_URL_PATH));

@@ -2,10 +2,11 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Imovel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** @mixin \App\Models\Imovel */
+/** @mixin Imovel */
 class ImovelResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -17,14 +18,14 @@ class ImovelResource extends JsonResource
             'titulo' => $this->titulo,
             'tipologia' => $this->tipologia,
             'tipo' => $this->tipo,
-            'finalidade' => $this->finalidade,
+            'finalidade' => $this->finalidade ?? 'venda',
             'preco' => (int) $this->preco,
-            'moeda' => $this->moeda,
+            'moeda' => $this->moeda ?? 'EUR',
             'zona' => $this->zona,
             'endereco' => $this->endereco,
             'cidade' => $this->cidade,
             'distrito' => $this->distrito,
-            'pais' => $this->pais,
+            'pais' => $this->pais ?? 'Portugal',
             'codigoPostal' => $this->codigo_postal,
             'area' => (int) $this->area,
             'areaTotal' => $this->area_total,

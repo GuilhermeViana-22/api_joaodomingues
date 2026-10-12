@@ -10,6 +10,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -58,11 +59,20 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json(['message' => 'Sessão expirada.'], 401);
         });
 
-        $exceptions->render(function (ModelNotFoundException $e, Request $request) {
+        // O Laravel converte o ModelNotFoundException (route model binding) em
+        // NotFoundHttpException antes de chegar aqui, por isso apanha-se este.
+        // Mensagens próprias de abort(404, '...') mantêm-se; a do Eloquent
+        // ("No query results for model...") e rotas inexistentes viram frase PT.
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }
 
-            return response()->json(['message' => 'O registo já não existe.'], 404);
+            $doModelo = $e->getPrevious() instanceof ModelNotFoundException;
+            $mensagem = ! $doModelo && $e->getMessage() !== '' && ! str_starts_with($e->getMessage(), 'The route ')
+                ? $e->getMessage()
+                : 'O registo já não existe.';
+
+            return response()->json(['message' => $mensagem], 404);
         });
     })->create();
