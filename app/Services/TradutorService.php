@@ -51,7 +51,7 @@ class TradutorService
     public function traduzirImovel(array $textos): array
     {
         // Motor desligado ou desconhecido: sem traduções (o site usa o português)
-        if (! in_array($this->driver(), ['deepl', 'google'], true)) {
+        if (! $this->ativo()) {
             return [];
         }
 
@@ -112,6 +112,12 @@ class TradutorService
         }
 
         return array_values($saida);
+    }
+
+    /** Há um motor de tradução configurado (deepl ou google)? */
+    public function ativo(): bool
+    {
+        return in_array($this->driver(), ['deepl', 'google'], true);
     }
 
     public function driver(): string

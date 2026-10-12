@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\TraduzirImovel;
 use App\Models\Imovel;
 use App\Models\User;
+use App\Services\ImovelService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Passport\Passport;
 use Tests\TestCase;
@@ -216,12 +219,44 @@ class ImovelTest extends TestCase
     {
         config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx']);
         Http::fake(['*' => Http::response('erro', 503)]);
+        Queue::fake();
         Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
 
-        $this->postJson('/api/v1/imoveis', $this->dados())
+        $id = $this->postJson('/api/v1/imoveis', $this->dados())
             ->assertCreated()
             ->assertJsonPath('titulo', 'Apartamento em Benfica')
-            ->assertJsonPath('traducoes', []);
+            ->assertJsonPath('traducoes', [])
+            ->json('id');
+
+        // A nova tentativa fica na fila, sem ninguém correr comandos
+        Queue::assertPushed(TraduzirImovel::class, fn ($job) => $job->imovelId === $id);
+    }
+
+    public function test_job_completa_a_traducao_quando_o_motor_volta(): void
+    {
+        config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx']);
+        $motorLigado = false;
+        Http::fake([
+            'api-free.deepl.com/*' => function ($pedido) use (&$motorLigado) {
+                if (! $motorLigado) {
+                    return Http::response('erro', 503);
+                }
+
+                return Http::response([
+                    'translations' => array_map(fn ($t) => ['text' => '['.$pedido['target_lang'].'] '.$t], $pedido['text']),
+                ]);
+            },
+        ]);
+        Queue::fake();
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        $id = $this->postJson('/api/v1/imoveis', $this->dados())->json('id');
+        $this->assertSame([], Imovel::query()->find($id)->traducoes);
+
+        // O motor volta: o job traduz e grava os 3 idiomas
+        $motorLigado = true;
+        (new TraduzirImovel($id))->handle(app(ImovelService::class));
+
+        $this->assertSame(['en', 'fr', 'es'], array_keys(Imovel::query()->find($id)->traducoes));
     }
 
     public function test_foto_retirada_so_e_apagada_depois_de_gravar(): void

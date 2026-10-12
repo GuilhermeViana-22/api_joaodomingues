@@ -10,9 +10,10 @@ use Illuminate\Console\Command;
 /**
  * Gera (ou volta a gerar) as traduções EN/FR/ES dos imóveis.
  *
- * Normalmente não é preciso: a API traduz ao gravar. Serve para os imóveis
- * criados antes da tradução automática e para repetir quando o motor de
- * tradução esteve em baixo (o log mostra "Tradução automática falhou").
+ * Não é preciso correr à mão: a API traduz ao gravar, o job TraduzirImovel
+ * repete quando o motor falha, e o start.sh corre este comando em segundo
+ * plano a cada deploy para apanhar imóveis gravados antes da tradução
+ * automática. Fica disponível para forçar (--todos) se for preciso.
  *
  *   php artisan imoveis:traduzir            # só os que faltam idiomas
  *   php artisan imoveis:traduzir --todos    # todos

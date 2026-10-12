@@ -20,6 +20,11 @@ if [ "$(php artisan tinker --execute='echo \App\Models\TextoSite::count();' 2>/d
 fi
 php artisan db:seed --class=UtilizadoresSeeder --force --no-interaction
 
+# Traduz (EN/FR/ES) os imóveis que ainda não têm os 3 idiomas, como os gravados
+# antes da tradução automática. Em segundo plano para não atrasar o arranque;
+# quando não falta nada, termina logo sem chamar o tradutor.
+(php artisan imoveis:traduzir --no-interaction || true) &
+
 (
     while true; do
         php artisan queue:work --sleep=3 --tries=3 --max-time=3600

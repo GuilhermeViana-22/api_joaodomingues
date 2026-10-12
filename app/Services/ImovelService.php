@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\TraduzirImovel;
 use App\Models\Imovel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,8 @@ use Throwable;
  *  3. Só depois do commit apaga do disco as fotos que saíram do imóvel. Se o
  *     rollback acontecesse com os ficheiros já apagados, o imóvel ficava com
  *     fotos partidas.
+ *  4. Se algum idioma não traduziu (motor em baixo), põe o job TraduzirImovel
+ *     na fila: o worker repete sozinho, sem comandos manuais.
  */
 class ImovelService
 {
@@ -49,6 +52,8 @@ class ImovelService
             Log::error('Falha ao criar imóvel; nada foi gravado.', ['erro' => $e->getMessage()]);
             throw $e;
         }
+
+        $this->repetirTraducaoSeFaltar($imovel);
 
         return $imovel->load('imagens');
     }
@@ -84,6 +89,8 @@ class ImovelService
         foreach ($removidas as $url) {
             $this->apagarFicheiroLocal($url);
         }
+
+        $this->repetirTraducaoSeFaltar($imovel);
 
         return $imovel->load('imagens');
     }
@@ -268,6 +275,14 @@ class ImovelService
         ];
 
         return $atuais !== $this->textos($dados);
+    }
+
+    /** Põe na fila uma nova tentativa de tradução se ficou algum idioma por fazer. */
+    private function repetirTraducaoSeFaltar(Imovel $imovel): void
+    {
+        if ($this->tradutor->ativo() && $this->faltaIdioma($imovel)) {
+            TraduzirImovel::dispatch($imovel->id)->delay(now()->addMinute());
+        }
     }
 
     private function faltaIdioma(Imovel $imovel): bool
