@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\TraduzirImovel;
 use App\Models\Imovel;
+use App\Support\FilaAssincrona;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -291,7 +292,7 @@ class ImovelService
     /** Põe na fila uma nova tentativa de tradução se ficou algum idioma por fazer. */
     private function repetirTraducaoSeFaltar(Imovel $imovel): void
     {
-        if ($this->tradutor->ativo() && $this->faltaIdioma($imovel)) {
+        if ($this->tradutor->ativo() && FilaAssincrona::ativa() && $this->faltaIdioma($imovel)) {
             TraduzirImovel::dispatch($imovel->id)->delay(now()->addMinute());
         }
     }

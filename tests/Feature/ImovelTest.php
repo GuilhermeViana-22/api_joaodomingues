@@ -223,6 +223,7 @@ class ImovelTest extends TestCase
         config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx']);
         Http::fake(['*' => Http::response('erro', 503)]);
         Queue::fake();
+        config(['queue.default' => 'database']);
         Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
 
         $id = $this->postJson('/api/v1/imoveis', $this->dados())
@@ -233,6 +234,18 @@ class ImovelTest extends TestCase
 
         // A nova tentativa fica na fila, sem ninguém correr comandos
         Queue::assertPushed(TraduzirImovel::class, fn ($job) => $job->imovelId === $id);
+    }
+
+    public function test_com_fila_sync_nao_agenda_repeticao_da_traducao(): void
+    {
+        config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx', 'queue.default' => 'sync']);
+        Http::fake(['*' => Http::response('erro', 503)]);
+        Queue::fake();
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $this->postJson('/api/v1/imoveis', $this->dados())->assertCreated();
+
+        Queue::assertNothingPushed();
     }
 
     public function test_job_completa_a_traducao_quando_o_motor_volta(): void

@@ -35,7 +35,9 @@ return [
     'traducao' => [
         'driver' => env('TRADUCAO_DRIVER') ?: (env('DEEPL_API_KEY') ? 'deepl' : 'google'),
         'deepl_key' => (string) env('DEEPL_API_KEY', ''),
-        'timeout' => (int) env('TRADUCAO_TIMEOUT', 8),
+        // Espera máxima por pedido ao motor, e tempo máximo total por gravação
+        'timeout' => (int) env('TRADUCAO_TIMEOUT', 6),
+        'orcamento' => (int) env('TRADUCAO_ORCAMENTO', 10),
     ],
 
     'slack' => [

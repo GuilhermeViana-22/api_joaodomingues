@@ -60,23 +60,23 @@ class TradutorService
         $lista = [$textos['titulo'], $textos['resumo'], $textos['descricao'], ...$destaques];
 
         $resultado = [];
-        foreach (array_keys(self::IDIOMAS) as $idioma) {
-            try {
-                $traduzidos = $this->traduzir($lista, $idioma);
-
-                $resultado[$idioma] = [
-                    'titulo' => $traduzidos[0],
-                    'resumo' => $traduzidos[1],
-                    'descricao' => $traduzidos[2],
-                    'destaques' => array_slice($traduzidos, 3),
-                ];
-            } catch (Throwable $e) {
+        foreach ($this->traduzirParaIdiomas($lista) as $idioma => $traduzidos) {
+            if ($traduzidos instanceof Throwable) {
                 Log::warning('Tradução automática falhou; o site usa o português neste idioma.', [
                     'idioma' => $idioma,
                     'driver' => $this->driver(),
-                    'erro' => $e->getMessage(),
+                    'erro' => $traduzidos->getMessage(),
                 ]);
+
+                continue;
             }
+
+            $resultado[$idioma] = [
+                'titulo' => $traduzidos[0],
+                'resumo' => $traduzidos[1],
+                'descricao' => $traduzidos[2],
+                'destaques' => array_slice($traduzidos, 3),
+            ];
         }
 
         return $resultado;
@@ -92,26 +92,236 @@ class TradutorService
      */
     public function traduzir(array $textos, string $idioma): array
     {
+        $resultado = $this->traduzirParaIdiomas($textos, [$idioma])[$idioma];
+        if ($resultado instanceof Throwable) {
+            throw $resultado;
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Traduz a mesma lista para vários idiomas de uma vez, mantendo a ordem.
+     *
+     * Os idiomas correm em paralelo (no Google) e há um tempo máximo total
+     * (TRADUCAO_ORCAMENTO, 10 s): quem grava no painel não fica à espera de um
+     * motor lento ou a recusar pedidos (429). O idioma que falhar ou não
+     * acabar a tempo vem como exceção, e quem chamou decide (os serviços
+     * guardam o resto e põem um job a repetir).
+     *
+     * @param  list<string>  $textos
+     * @param  list<string>|null  $idiomas  por defeito en, fr e es
+     * @return array<string, list<string>|Throwable>
+     */
+    public function traduzirParaIdiomas(array $textos, ?array $idiomas = null): array
+    {
+        $idiomas ??= self::IDIOMAS_SITE;
+        $textos = array_values($textos);
+
         // Textos vazios não vão ao motor (gasta quota e algumas APIs recusam)
         $indices = array_keys(array_filter($textos, fn ($t) => trim((string) $t) !== ''));
         if ($indices === []) {
-            return $textos;
+            return array_fill_keys($idiomas, $textos);
         }
-        $aTraduzir = array_values(array_map(fn ($i) => (string) $textos[$i], $indices));
 
-        $traduzidos = match ($this->driver()) {
-            'deepl' => $this->deepl($aTraduzir, self::IDIOMAS[$idioma]['deepl']),
-            'google' => $this->google($aTraduzir, self::IDIOMAS[$idioma]['google']),
-            default => throw new RuntimeException("Motor de tradução desconhecido: {$this->driver()}."),
+        // Variáveis ({{nome}}) e HTML (<br>) não podem ser traduzidos: saem
+        // trocados por marcadores ⟦0⟧, ⟦1⟧... e voltam no fim
+        $protegidos = array_map(fn ($i) => $this->proteger((string) $textos[$i]), $indices);
+        $aTraduzir = array_column($protegidos, 'texto');
+        $limite = microtime(true) + $this->orcamento();
+
+        $brutos = match ($this->driver()) {
+            'deepl' => $this->deeplVarios($aTraduzir, $idiomas, $limite),
+            'google' => $this->googleVarios($aTraduzir, $idiomas, $limite),
+            default => array_fill_keys($idiomas, new RuntimeException("Motor de tradução desconhecido: {$this->driver()}.")),
         };
 
-        // Volta a pôr cada tradução no lugar original
-        $saida = $textos;
-        foreach ($indices as $n => $i) {
-            $saida[$i] = $traduzidos[$n];
+        // Volta a pôr cada tradução no lugar original, com as variáveis
+        $resultado = [];
+        foreach ($brutos as $idioma => $traduzidos) {
+            if ($traduzidos instanceof Throwable) {
+                $resultado[$idioma] = $traduzidos;
+
+                continue;
+            }
+            $saida = $textos;
+            foreach ($indices as $n => $i) {
+                $saida[$i] = $this->restaurar($traduzidos[$n], $protegidos[$n]['pecas'], (string) $textos[$i], $idioma);
+            }
+            $resultado[$idioma] = $saida;
         }
 
-        return array_values($saida);
+        return $resultado;
+    }
+
+    /**
+     * DeepL: um pedido por idioma com até 50 textos (é rápida; em série chega).
+     *
+     * @param  list<string>  $textos
+     * @param  list<string>  $idiomas
+     * @return array<string, list<string>|Throwable>
+     */
+    private function deeplVarios(array $textos, array $idiomas, float $limite): array
+    {
+        $resultado = [];
+        foreach ($idiomas as $idioma) {
+            try {
+                $traduzidos = [];
+                foreach (array_chunk($textos, 50) as $lote) {
+                    $this->exigirTempo($limite);
+                    array_push($traduzidos, ...$this->deepl($lote, self::IDIOMAS[$idioma]['deepl']));
+                }
+                $resultado[$idioma] = $traduzidos;
+            } catch (Throwable $e) {
+                $resultado[$idioma] = $e;
+            }
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Google Tradutor (endpoint público "gtx"): um pedido por texto e idioma,
+     * em paralelo, até 12 de cada vez (mais do que isso o Google devolve 429).
+     * O texto vai no corpo (POST) para descrições longas não estourarem o URL.
+     *
+     * @param  list<string>  $textos
+     * @param  list<string>  $idiomas
+     * @return array<string, list<string>|Throwable>
+     */
+    private function googleVarios(array $textos, array $idiomas, float $limite): array
+    {
+        $tarefas = [];
+        foreach ($idiomas as $idioma) {
+            foreach ($textos as $n => $texto) {
+                $tarefas[] = [$idioma, $n, $texto];
+            }
+        }
+
+        $traduzidos = array_fill_keys($idiomas, []);
+        $falhas = [];
+
+        foreach (array_chunk($tarefas, 12) as $lote) {
+            // Idiomas que já falharam não gastam mais pedidos
+            $lote = array_values(array_filter($lote, fn ($t) => ! isset($falhas[$t[0]])));
+            if ($lote === []) {
+                continue;
+            }
+            try {
+                $this->exigirTempo($limite);
+            } catch (RuntimeException $e) {
+                foreach ($lote as [$idioma]) {
+                    $falhas[$idioma] ??= $e;
+                }
+
+                continue;
+            }
+
+            $respostas = Http::pool(fn (Pool $pool) => array_map(
+                fn ($t) => $pool->asForm()
+                    ->timeout($this->timeout())
+                    ->post('https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&dt=t&tl='.self::IDIOMAS[$t[0]]['google'], ['q' => $t[2]]),
+                $lote,
+            ));
+
+            foreach ($lote as $k => [$idioma, $n]) {
+                try {
+                    $traduzidos[$idioma][$n] = $this->lerGoogle($respostas[$k]);
+                } catch (Throwable $e) {
+                    $falhas[$idioma] ??= $e;
+                }
+            }
+        }
+
+        $resultado = [];
+        foreach ($idiomas as $idioma) {
+            if (isset($falhas[$idioma])) {
+                $resultado[$idioma] = $falhas[$idioma];
+
+                continue;
+            }
+            ksort($traduzidos[$idioma]);
+            $resultado[$idioma] = array_values($traduzidos[$idioma]);
+        }
+
+        return $resultado;
+    }
+
+    /** Texto traduzido de uma resposta do Google (ou exceção se falhou). */
+    private function lerGoogle(mixed $resposta): string
+    {
+        // Falhas de rede chegam ao pool como exceção, não como resposta
+        if ($resposta instanceof Throwable) {
+            throw new RuntimeException('Google Tradutor sem resposta: '.$resposta->getMessage());
+        }
+        $this->exigirSucesso($resposta, 'Google Tradutor');
+
+        // Formato: [[["frase traduzida", "frase original", ...], ...], ...]
+        $frases = $resposta->json('0');
+        if (! is_array($frases)) {
+            throw new RuntimeException('Google Tradutor devolveu um formato inesperado.');
+        }
+
+        return implode('', array_map(fn ($f) => (string) ($f[0] ?? ''), $frases));
+    }
+
+    private function exigirTempo(float $limite): void
+    {
+        if (microtime(true) > $limite) {
+            throw new RuntimeException('Tempo máximo de tradução esgotado; fica para nova tentativa.');
+        }
+    }
+
+    private function orcamento(): int
+    {
+        return (int) config('services.traducao.orcamento', 10);
+    }
+
+    /**
+     * Troca variáveis e tags por marcadores numerados que os motores não traduzem.
+     *
+     * @return array{texto: string, pecas: list<string>}
+     */
+    private function proteger(string $texto): array
+    {
+        $pecas = [];
+        $protegido = preg_replace_callback('/\{\{\s*[\w.]+\s*\}\}|<[^>]+>/u', function ($m) use (&$pecas) {
+            $pecas[] = $m[0];
+
+            return '⟦'.(count($pecas) - 1).'⟧';
+        }, $texto);
+
+        return ['texto' => (string) $protegido, 'pecas' => $pecas];
+    }
+
+    /**
+     * Repõe as variáveis e tags. Se o motor perdeu ou duplicou algum marcador,
+     * a tradução não é de confiança (o site partiria a variável): fica o
+     * texto em português nesse caso.
+     *
+     * @param  list<string>  $pecas
+     */
+    private function restaurar(string $traduzido, array $pecas, string $original, string $idioma): string
+    {
+        if ($pecas === []) {
+            return $traduzido;
+        }
+
+        $usados = [];
+        $resultado = preg_replace_callback('/⟦\s*(\d+)\s*⟧/u', function ($m) use ($pecas, &$usados) {
+            $usados[] = (int) $m[1];
+
+            return $pecas[(int) $m[1]] ?? $m[0];
+        }, $traduzido);
+
+        sort($usados);
+        if ($usados !== array_keys($pecas)) {
+            Log::warning('Tradução perdeu variáveis; fica o texto em português.', ['idioma' => $idioma, 'original' => $original]);
+
+            return $original;
+        }
+
+        return (string) $resultado;
     }
 
     /** Há um motor de tradução configurado (deepl ou google)? */
@@ -160,39 +370,6 @@ class TradutorService
         }
 
         return $traducoes;
-    }
-
-    /**
-     * Google Tradutor (endpoint público "gtx"): um pedido por texto, em paralelo.
-     * O texto vai no corpo (POST) para descrições longas não estourarem o URL.
-     *
-     * @param  list<string>  $textos
-     * @return list<string>
-     */
-    private function google(array $textos, string $alvo): array
-    {
-        $url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&dt=t&tl='.$alvo;
-
-        $respostas = Http::pool(fn (Pool $pool) => array_map(
-            fn (string $texto) => $pool->asForm()->timeout($this->timeout())->post($url, ['q' => $texto]),
-            $textos,
-        ));
-
-        return array_map(function ($resposta) {
-            // Falhas de rede chegam ao pool como exceção, não como resposta
-            if ($resposta instanceof Throwable) {
-                throw new RuntimeException('Google Tradutor sem resposta: '.$resposta->getMessage());
-            }
-            $this->exigirSucesso($resposta, 'Google Tradutor');
-
-            // Formato: [[["frase traduzida", "frase original", ...], ...], ...]
-            $frases = $resposta->json('0');
-            if (! is_array($frases)) {
-                throw new RuntimeException('Google Tradutor devolveu um formato inesperado.');
-            }
-
-            return implode('', array_map(fn ($f) => (string) ($f[0] ?? ''), $frases));
-        }, $respostas);
     }
 
     private function exigirSucesso(Response $resposta, string $motor): void

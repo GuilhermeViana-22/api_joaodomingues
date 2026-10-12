@@ -17,12 +17,14 @@ class TextoSite extends Model
     protected $fillable = [
         'locale',
         'conteudo',
+        'fontes',
     ];
 
     protected function casts(): array
     {
         return [
             'conteudo' => 'array',
+            'fontes' => 'array',
         ];
     }
 }

@@ -137,6 +137,6 @@ class PedidoTest extends TestCase
 
         $this->putJson('/api/v1/textos', $textos)
             ->assertOk()
-            ->assertJsonPath('pt.hero.eyebrow', 'Consultor em Lisboa');
+            ->assertJsonPath('textos.pt.hero.eyebrow', 'Consultor em Lisboa');
     }
 }
