@@ -1,13 +1,15 @@
 <?php
 
 /*
- * O site e o painel na Vercel são sempre aceites; CORS_ALLOWED_ORIGINS
+ * O site e o painel (domínio próprio na VPS e Vercel) são sempre aceites; CORS_ALLOWED_ORIGINS
  * acrescenta outras origens (separadas por vírgula). A barra final é
  * removida porque o cabeçalho Origin nunca a traz.
  */
 $origens = array_values(array_unique(array_filter(array_map(
     fn (string $origem) => rtrim(trim($origem), '/'),
     [
+        'https://joaodomingues.pt',
+        'https://www.joaodomingues.pt',
         'https://joaodomingues.vercel.app',
         ...explode(',', (string) env(
             'CORS_ALLOWED_ORIGINS',
