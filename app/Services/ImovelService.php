@@ -4,43 +4,111 @@ namespace App\Services;
 
 use App\Models\Imovel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
+/**
+ * Regras de gravação dos imóveis (criar, editar, publicar, fotos).
+ *
+ * Fluxo de criar/editar:
+ *  1. Traduz os textos PT-PT para EN/FR/ES (fora da transação: é uma chamada
+ *     HTTP lenta e não deve prender linhas da base enquanto espera).
+ *  2. Abre a transação, grava o imóvel e as fotos; qualquer erro faz rollback.
+ *  3. Só depois do commit apaga do disco as fotos que saíram do imóvel. Se o
+ *     rollback acontecesse com os ficheiros já apagados, o imóvel ficava com
+ *     fotos partidas.
+ */
 class ImovelService
 {
+    public function __construct(private readonly TradutorService $tradutor) {}
+
     public function criar(array $dados): Imovel
     {
-        return DB::transaction(function () use ($dados) {
+        $traducoes = $this->tradutor->traduzirImovel($this->textos($dados));
+
+        DB::beginTransaction();
+        try {
             $referencia = $this->referencia($dados['referencia'] ?? '');
             $id = $this->idLivre(Str::slug($referencia));
 
             $imovel = Imovel::query()->create([
                 ...$this->atributos($dados, $referencia),
+                'traducoes' => $traducoes,
                 'id' => $id,
                 'slug' => $id,
             ]);
 
             $this->sincronizarImagens($imovel, $dados['imagens'] ?? []);
 
-            return $imovel->load('imagens');
-        });
+            DB::commit();
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Falha ao criar imóvel; nada foi gravado.', ['erro' => $e->getMessage()]);
+            throw $e;
+        }
+
+        return $imovel->load('imagens');
     }
 
     public function atualizar(Imovel $imovel, array $dados): Imovel
     {
-        return DB::transaction(function () use ($imovel, $dados) {
+        // Só volta a traduzir se o texto em português mudou ou se falta algum
+        // idioma (ex.: o motor falhou da última vez). Poupa quota e tempo.
+        $traducoes = $this->textosMudaram($imovel, $dados) || $this->faltaIdioma($imovel)
+            ? $this->tradutor->traduzirImovel($this->textos($dados))
+            : $imovel->traducoes;
+
+        $removidas = [];
+
+        DB::beginTransaction();
+        try {
             $referencia = $this->referencia($dados['referencia'] ?? $imovel->referencia, $imovel);
-            $imovel->fill($this->atributos($dados, $referencia));
+            $imovel->fill([...$this->atributos($dados, $referencia), 'traducoes' => $traducoes]);
             $imovel->save();
 
             if (array_key_exists('imagens', $dados)) {
-                $this->sincronizarImagens($imovel, $dados['imagens'] ?? []);
+                $removidas = $this->sincronizarImagens($imovel, $dados['imagens'] ?? []);
             }
 
-            return $imovel->load('imagens');
-        });
+            DB::commit();
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Falha ao editar imóvel; as alterações foram desfeitas.', ['id' => $imovel->id, 'erro' => $e->getMessage()]);
+            throw $e;
+        }
+
+        // Fora da transação: só apaga ficheiros quando a base já confirmou
+        foreach ($removidas as $url) {
+            $this->apagarFicheiroLocal($url);
+        }
+
+        return $imovel->load('imagens');
+    }
+
+    /**
+     * Volta a gerar as traduções de um imóvel (comando imoveis:traduzir).
+     * Devolve os idiomas que ficaram traduzidos.
+     *
+     * @return list<string>
+     */
+    public function retraduzir(Imovel $imovel): array
+    {
+        $traducoes = $this->tradutor->traduzirImovel([
+            'titulo' => $imovel->titulo,
+            'resumo' => $imovel->resumo,
+            'descricao' => $imovel->descricao,
+            'destaques' => $imovel->destaques ?? [],
+        ]);
+
+        // Se nada traduziu (motor em baixo), mantém o que havia
+        if ($traducoes !== []) {
+            $imovel->forceFill(['traducoes' => $traducoes])->saveQuietly();
+        }
+
+        return array_keys($traducoes);
     }
 
     public function publicar(Imovel $imovel, bool $publicado): Imovel
@@ -57,8 +125,14 @@ class ImovelService
         return $imovel->load('imagens');
     }
 
-    /** @param  list<string>  $urls */
-    public function sincronizarImagens(Imovel $imovel, array $urls): void
+    /**
+     * Substitui as fotos do imóvel pela lista recebida (a ordem é a do site).
+     * Devolve os endereços que saíram, para apagar do disco depois do commit.
+     *
+     * @param  list<string>  $urls
+     * @return list<string>
+     */
+    public function sincronizarImagens(Imovel $imovel, array $urls): array
     {
         $anteriores = $imovel->imagens()->pluck('caminho');
         $imovel->imagens()->delete();
@@ -70,12 +144,7 @@ class ImovelService
             ]);
         }
 
-        $mantidas = collect($urls);
-        foreach ($anteriores as $caminho) {
-            if (! $mantidas->contains($caminho)) {
-                $this->apagarFicheiroLocal((string) $caminho);
-            }
-        }
+        return $anteriores->map(fn ($c) => (string) $c)->diff($urls)->values()->all();
     }
 
     public function apagarFicheiroLocal(string $url): void
@@ -146,7 +215,6 @@ class ImovelService
             'resumo' => $dados['resumo'],
             'descricao' => $dados['descricao'],
             'destaques' => array_values($dados['destaques'] ?? []),
-            'traducoes' => $dados['traducoes'] ?? [],
             'publicado' => (bool) ($dados['publicado'] ?? false),
         ];
 
@@ -173,5 +241,37 @@ class ImovelService
         }
 
         return $base;
+    }
+
+    /**
+     * Textos em português que alimentam a tradução.
+     *
+     * @return array{titulo: string, resumo: string, descricao: string, destaques: list<string>}
+     */
+    private function textos(array $dados): array
+    {
+        return [
+            'titulo' => (string) $dados['titulo'],
+            'resumo' => (string) $dados['resumo'],
+            'descricao' => (string) $dados['descricao'],
+            'destaques' => array_values($dados['destaques'] ?? []),
+        ];
+    }
+
+    private function textosMudaram(Imovel $imovel, array $dados): bool
+    {
+        $atuais = [
+            'titulo' => $imovel->titulo,
+            'resumo' => $imovel->resumo,
+            'descricao' => $imovel->descricao,
+            'destaques' => array_values($imovel->destaques ?? []),
+        ];
+
+        return $atuais !== $this->textos($dados);
+    }
+
+    private function faltaIdioma(Imovel $imovel): bool
+    {
+        return count(array_intersect(TradutorService::IDIOMAS_SITE, array_keys($imovel->traducoes ?? []))) < count(TradutorService::IDIOMAS_SITE);
     }
 }

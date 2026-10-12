@@ -6,6 +6,7 @@ use App\Models\Imovel;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Passport\Passport;
 use Tests\TestCase;
@@ -137,6 +138,116 @@ class ImovelTest extends TestCase
         $this->assertNull(Imovel::query()->find($id));
     }
 
+    public function test_referencia_pode_repetir_se(): void
+    {
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $a = $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-020']))->assertCreated();
+        $b = $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'jd-020']))->assertCreated();
+
+        $this->assertSame('JD-020', $b->json('referencia'));
+        $this->assertNotSame($a->json('id'), $b->json('id'));
+    }
+
+    public function test_erros_de_validacao_vem_por_campo_em_portugues(): void
+    {
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $this->postJson('/api/v1/imoveis', $this->dados(['preco' => 0, 'descricao' => 'curta', 'referencia' => 'JD 1']))
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.preco.0', 'O preço tem de ser maior que zero.')
+            ->assertJsonPath('errors.descricao.0', 'A descrição precisa de pelo menos 20 caracteres.')
+            ->assertJsonPath('errors.referencia.0', 'A referência só pode ter letras, números e hífen, entre 2 e 20 caracteres (ex.: JD-006).');
+    }
+
+    public function test_destaques_em_branco_sao_ignorados(): void
+    {
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $this->postJson('/api/v1/imoveis', $this->dados(['destaques' => ['Varanda', '', '  ', 'Garagem']]))
+            ->assertCreated()
+            ->assertJsonPath('destaques', ['Varanda', 'Garagem']);
+    }
+
+    public function test_traduz_automaticamente_ao_gravar_com_deepl(): void
+    {
+        config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx']);
+        Http::fake([
+            'api-free.deepl.com/*' => fn ($pedido) => Http::response([
+                'translations' => array_map(
+                    fn ($t) => ['text' => '['.$pedido['target_lang'].'] '.$t],
+                    $pedido['text'],
+                ),
+            ]),
+        ]);
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $criado = $this->postJson('/api/v1/imoveis', $this->dados())->assertCreated();
+
+        $criado->assertJsonPath('traducoes.en.titulo', '[EN-GB] Apartamento em Benfica')
+            ->assertJsonPath('traducoes.fr.resumo', '[FR] Apartamento luminoso com varanda.')
+            ->assertJsonPath('traducoes.es.destaques', ['[ES] Varanda']);
+        Http::assertSentCount(3);
+
+        // Editar sem mudar os textos não volta a chamar o tradutor
+        $this->putJson('/api/v1/imoveis/'.$criado->json('id'), $this->dados(['preco' => 300000]))->assertOk();
+        Http::assertSentCount(3);
+
+        // Mudar o título volta a traduzir
+        $this->putJson('/api/v1/imoveis/'.$criado->json('id'), $this->dados(['titulo' => 'Moradia em Cascais']))
+            ->assertOk()
+            ->assertJsonPath('traducoes.en.titulo', '[EN-GB] Moradia em Cascais');
+    }
+
+    public function test_traduz_com_google_sem_chave(): void
+    {
+        config(['services.traducao.driver' => 'google']);
+        Http::fake([
+            'translate.googleapis.com/*' => fn ($pedido) => Http::response([[['('.$this->idiomaDoUrl($pedido->url()).') '.$pedido['q'], $pedido['q']]]]),
+        ]);
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $this->postJson('/api/v1/imoveis', $this->dados())
+            ->assertCreated()
+            ->assertJsonPath('traducoes.fr.titulo', '(fr) Apartamento em Benfica');
+    }
+
+    public function test_falha_na_traducao_nao_impede_de_gravar(): void
+    {
+        config(['services.traducao.driver' => 'deepl', 'services.traducao.deepl_key' => 'chave:fx']);
+        Http::fake(['*' => Http::response('erro', 503)]);
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+
+        $this->postJson('/api/v1/imoveis', $this->dados())
+            ->assertCreated()
+            ->assertJsonPath('titulo', 'Apartamento em Benfica')
+            ->assertJsonPath('traducoes', []);
+    }
+
+    public function test_foto_retirada_so_e_apagada_depois_de_gravar(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('imoveis/velha.jpg', 'x');
+        Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));
+        $velha = Storage::disk('public')->url('imoveis/velha.jpg');
+
+        $id = $this->postJson('/api/v1/imoveis', $this->dados(['imagens' => [$velha]]))->json('id');
+
+        // Pedido inválido: nada muda, a foto continua no disco
+        $this->putJson('/api/v1/imoveis/'.$id, $this->dados(['imagens' => ['imoveis/nova.jpg'], 'preco' => 0]))->assertUnprocessable();
+        Storage::disk('public')->assertExists('imoveis/velha.jpg');
+
+        $this->putJson('/api/v1/imoveis/'.$id, $this->dados(['imagens' => ['imoveis/nova.jpg']]))->assertOk();
+        Storage::disk('public')->assertMissing('imoveis/velha.jpg');
+    }
+
+    private function idiomaDoUrl(string $url): string
+    {
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+
+        return (string) $q['tl'];
+    }
+
     /** @param  array<string, mixed>  $extra */
     private function dados(array $extra = []): array
     {
@@ -155,7 +266,6 @@ class ImovelTest extends TestCase
             'destaques' => ['Varanda'],
             'imagens' => ['imoveis/capa.jpg'],
             'publicado' => true,
-            'traducoes' => [],
             'referencia' => 'JD-010',
         ], $extra);
     }

@@ -28,6 +28,16 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+    | Tradução automática dos imóveis (app/Services/TradutorService.php).
+    | driver: deepl | google | nenhum. Com DEEPL_API_KEY e sem driver, usa a DeepL.
+    */
+    'traducao' => [
+        'driver' => env('TRADUCAO_DRIVER') ?: (env('DEEPL_API_KEY') ? 'deepl' : 'google'),
+        'deepl_key' => (string) env('DEEPL_API_KEY', ''),
+        'timeout' => (int) env('TRADUCAO_TIMEOUT', 8),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

@@ -6,12 +6,17 @@ use App\Http\Requests\ImovelRequest;
 use App\Http\Requests\PublicarImovelRequest;
 use App\Http\Resources\ImovelResource;
 use App\Models\Imovel;
+use App\Models\User;
 use App\Services\ImovelService;
 use App\Support\Sessao;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
 class ImovelController extends Controller
 {
@@ -63,31 +68,73 @@ class ImovelController extends Controller
         return new ImovelResource($imovel->load('imagens'));
     }
 
+    /**
+     * Cria o imóvel. 201 com o imóvel gravado (já com as traduções EN/FR/ES).
+     * Erros de validação saem como 422 { message, errors: { campo: [msg] } }.
+     */
     public function store(ImovelRequest $request): JsonResponse
     {
-        $imovel = $this->imoveis->criar($request->validated());
+        try {
+            $imovel = $this->imoveis->criar($request->validated());
 
-        return (new ImovelResource($imovel))->response()->setStatusCode(201);
+            return (new ImovelResource($imovel))->response()->setStatusCode(201);
+        } catch (Throwable $e) {
+            return $this->falha($e, 'Não foi possível registar o imóvel. Nada foi gravado; tente outra vez.');
+        }
     }
 
-    public function update(ImovelRequest $request, Imovel $imovel): ImovelResource
+    public function update(ImovelRequest $request, Imovel $imovel): JsonResponse
     {
-        return new ImovelResource($this->imoveis->atualizar($imovel, $request->validated()));
+        try {
+            return (new ImovelResource($this->imoveis->atualizar($imovel, $request->validated())))->response();
+        } catch (Throwable $e) {
+            return $this->falha($e, 'Não foi possível guardar as alterações. O imóvel ficou como estava; tente outra vez.');
+        }
     }
 
-    public function publicar(PublicarImovelRequest $request, Imovel $imovel): ImovelResource
+    public function publicar(PublicarImovelRequest $request, Imovel $imovel): JsonResponse
     {
-        return new ImovelResource($this->imoveis->publicar($imovel, $request->boolean('publicado')));
+        try {
+            return (new ImovelResource($this->imoveis->publicar($imovel, $request->boolean('publicado'))))->response();
+        } catch (Throwable $e) {
+            return $this->falha($e, 'Não foi possível mudar a publicação. Tente outra vez.');
+        }
     }
 
     public function destroy(Imovel $imovel): Response
     {
-        $imovel->delete();
+        try {
+            $imovel->delete();
 
-        return response()->noContent();
+            return response()->noContent();
+        } catch (Throwable $e) {
+            return $this->falha($e, 'Não foi possível excluir o imóvel. Tente outra vez.');
+        }
     }
 
-    private function gestor(Request $request): ?\App\Models\User
+    /**
+     * Resposta para erros nas gravações.
+     *
+     * Validação (422) e erros HTTP já tratados (403, 404...) seguem para o
+     * handler global (bootstrap/app.php), que os devolve no formato do painel.
+     * O resto é um erro inesperado: fica no log com o detalhe técnico e o
+     * utilizador recebe 500 com uma frase clara, sem expor o erro interno.
+     */
+    private function falha(Throwable $e, string $mensagem): JsonResponse
+    {
+        if ($e instanceof ValidationException || $e instanceof HttpExceptionInterface) {
+            throw $e;
+        }
+
+        Log::error('Erro inesperado ao gravar imóvel.', [
+            'mensagem' => $e->getMessage(),
+            'ficheiro' => $e->getFile().':'.$e->getLine(),
+        ]);
+
+        return response()->json(['message' => $mensagem], 500);
+    }
+
+    private function gestor(Request $request): ?User
     {
         $utilizador = Sessao::opcional($request);
         if ($utilizador !== null && ! $utilizador->pode('imoveis')) {

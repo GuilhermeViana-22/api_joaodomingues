@@ -2,10 +2,16 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Imovel;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validação do formulário de imóvel do painel (criar e editar).
+ *
+ * As mensagens estão todas aqui, em PT-PT e já prontas para o utilizador: o
+ * painel mostra-as por baixo de cada campo (chave = nome do campo no JSON).
+ * As traduções EN/FR/ES não entram: a API gera-as (TradutorService).
+ */
 class ImovelRequest extends FormRequest
 {
     public function authorize(): bool
@@ -19,20 +25,20 @@ class ImovelRequest extends FormRequest
             $ref = strtoupper(trim((string) $this->input('referencia')));
             $this->merge(['referencia' => $ref === '' ? null : $ref]);
         }
+
+        // Linhas de destaque em branco são descartadas (o ConvertEmptyStringsToNull
+        // transforma-as em null e a regra "string" recusava o imóvel inteiro)
+        if (is_array($this->input('destaques'))) {
+            $destaques = array_map(fn ($d) => trim((string) $d), $this->input('destaques'));
+            $this->merge(['destaques' => array_values(array_filter($destaques, fn ($d) => $d !== ''))]);
+        }
     }
 
     public function rules(): array
     {
-        /** @var Imovel|null $imovel */
-        $imovel = $this->route('imovel');
-
         return [
-            'referencia' => [
-                'nullable',
-                'string',
-                'regex:/^[A-Z0-9-]{2,20}$/',
-                Rule::unique('imoveis', 'referencia')->ignore($imovel?->id, 'id'),
-            ],
+            // A referência pode repetir-se entre imóveis (ex.: frações do mesmo prédio)
+            'referencia' => ['nullable', 'string', 'regex:/^[A-Z0-9-]{2,20}$/'],
             'titulo' => ['required', 'string', 'min:4', 'max:180'],
             'tipologia' => ['required', 'string', 'max:16'],
             'tipo' => ['required', Rule::in(['Apartamento', 'Moradia', 'Terreno', 'Espaço comercial', 'Outro'])],
@@ -49,7 +55,6 @@ class ImovelRequest extends FormRequest
             'imagens' => ['nullable', 'array', 'max:6'],
             'imagens.*' => ['string', 'max:500'],
             'publicado' => ['sometimes', 'boolean'],
-            'traducoes' => ['nullable', 'array'],
             'finalidade' => ['sometimes', Rule::in(['venda', 'arrendamento'])],
             'moeda' => ['sometimes', 'string', 'size:3'],
             'areaTotal' => ['nullable', 'integer', 'min:1'],
@@ -78,19 +83,58 @@ class ImovelRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'titulo.required' => 'Escreva um título com pelo menos 4 caracteres.',
-            'titulo.min' => 'Escreva um título com pelo menos 4 caracteres.',
+            'referencia.regex' => 'A referência só pode ter letras, números e hífen, entre 2 e 20 caracteres (ex.: JD-006).',
+
+            'titulo.required' => 'Escreva o título do imóvel.',
+            'titulo.min' => 'O título precisa de pelo menos 4 caracteres.',
+            'titulo.max' => 'O título pode ter no máximo 180 caracteres.',
+
+            'tipologia.required' => 'Escolha a tipologia (T0 a T6+).',
+            'tipo.required' => 'Escolha o tipo de imóvel.',
+            'tipo.in' => 'Tipo de imóvel inválido. Escolha uma das opções da lista.',
+
             'zona.required' => 'Indique a localização (ex.: Benfica, Lisboa).',
-            'tipologia.required' => 'Escolha a tipologia.',
-            'preco.min' => 'Indique o preço.',
-            'area.min' => 'Indique a área útil.',
+            'zona.max' => 'A localização pode ter no máximo 180 caracteres.',
+
+            'preco.required' => 'Indique o preço em euros.',
+            'preco.integer' => 'O preço tem de ser um número inteiro, sem cêntimos.',
+            'preco.min' => 'O preço tem de ser maior que zero.',
+
+            'area.required' => 'Indique a área útil em m².',
+            'area.integer' => 'A área tem de ser um número inteiro.',
+            'area.min' => 'A área útil tem de ser maior que zero.',
+
+            'quartos.required' => 'Indique o número de quartos.',
+            'quartos.integer' => 'O número de quartos tem de ser inteiro.',
+            'quartos.min' => 'O número de quartos não pode ser negativo.',
+            'quartos.max' => 'No máximo 50 quartos.',
+
+            'casasBanho.required' => 'Indique o número de casas de banho.',
+            'casasBanho.integer' => 'O número de casas de banho tem de ser inteiro.',
+            'casasBanho.min' => 'O número de casas de banho não pode ser negativo.',
+            'casasBanho.max' => 'No máximo 50 casas de banho.',
+
+            'estado.required' => 'Escolha o estado (Disponível, Reservado ou Vendido).',
+            'estado.in' => 'Estado inválido. Escolha Disponível, Reservado ou Vendido.',
+
             'resumo.required' => 'Escreva o resumo que aparece no card.',
-            'descricao.min' => 'Escreva uma descrição com pelo menos 20 caracteres.',
-            'referencia.regex' => 'Use só letras, números e hífen (ex.: JD-006).',
-            'referencia.unique' => 'Já existe um imóvel com esta referência.',
+            'resumo.max' => 'O resumo pode ter no máximo 500 caracteres.',
+
+            'descricao.required' => 'Escreva a descrição do imóvel.',
+            'descricao.min' => 'A descrição precisa de pelo menos 20 caracteres.',
+            'descricao.max' => 'A descrição pode ter no máximo 8000 caracteres.',
+
+            'destaques.array' => 'Os destaques têm de ser uma lista.',
+            'destaques.max' => 'No máximo 20 destaques.',
+            'destaques.*.string' => 'Cada destaque tem de ser um texto.',
+            'destaques.*.max' => 'Cada destaque pode ter no máximo 180 caracteres.',
+
+            'imagens.array' => 'As fotos têm de ser uma lista.',
             'imagens.max' => 'Cada imóvel pode ter no máximo 6 fotos.',
-            'estado.in' => 'Estado inválido.',
-            'tipo.in' => 'Tipo de imóvel inválido.',
+            'imagens.*.string' => 'Endereço de foto inválido. Envie a foto outra vez.',
+            'imagens.*.max' => 'Endereço de foto demasiado longo. Envie a foto outra vez.',
+
+            'publicado.boolean' => 'Valor de publicação inválido.',
         ];
     }
 }
