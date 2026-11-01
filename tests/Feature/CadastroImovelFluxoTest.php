@@ -171,7 +171,7 @@ class CadastroImovelFluxoTest extends TestCase
     {
         $dados = $this->novo([
             'titulo' => 'Armazém com cais de carga',
-            'tipo' => 'Espaço comercial',
+            'tipo' => 'Armazém',
             'tipologia' => '',
             'zona' => '',
             'area' => 0,
@@ -185,6 +185,7 @@ class CadastroImovelFluxoTest extends TestCase
 
         $criado = $this->postJson('/api/v1/imoveis', $dados)
             ->assertCreated()
+            ->assertJsonPath('tipo', 'Armazém')
             ->assertJsonPath('tipologia', '')
             ->assertJsonPath('zona', '')
             ->assertJsonPath('area', 0)

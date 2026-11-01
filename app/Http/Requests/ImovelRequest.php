@@ -65,7 +65,7 @@ class ImovelRequest extends FormRequest
             'referencia' => ['nullable', 'string', 'regex:/^[A-Z0-9-]{2,20}$/'],
             'titulo' => ['required', 'string', 'min:4', 'max:'.self::LIMITE_TEXTO],
             'tipologia' => ['nullable', 'string', 'max:16'],
-            'tipo' => ['required', Rule::in(['Apartamento', 'Moradia', 'Terreno', 'Espaço comercial', 'Outro'])],
+            'tipo' => ['required', Rule::in(['Apartamento', 'Moradia', 'Terreno', 'Espaço comercial', 'Armazém', 'Outro'])],
             'zona' => ['nullable', 'string', 'max:'.self::LIMITE_TEXTO],
             'preco' => ['required', 'integer', 'min:1'],
             'area' => ['nullable', 'integer', 'min:1'],
