@@ -23,7 +23,8 @@ class DefinicaoController extends Controller
             ],
         ];
 
-        return response()->json($valor);
+        // Foto da secção "Sobre mim" (null: o site usa a sua)
+        return response()->json([...$valor, 'fotoSobre' => FotoSobreController::url()]);
     }
 
     public function update(DefinicoesRequest $request): JsonResponse

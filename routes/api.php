@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DefinicaoController;
+use App\Http\Controllers\FotoSobreController;
 use App\Http\Controllers\ImagemController;
 use App\Http\Controllers\ImovelController;
 use App\Http\Controllers\PedidoController;
@@ -47,6 +48,8 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::put('textos', [TextoController::class, 'update'])->middleware('modulo:conteudo');
+            Route::post('definicoes/foto-sobre', [FotoSobreController::class, 'store'])->middleware('modulo:conteudo');
+            Route::delete('definicoes/foto-sobre', [FotoSobreController::class, 'destroy'])->middleware('modulo:conteudo');
 
             Route::middleware('modulo:pedidos')->group(function () {
                 Route::get('pedidos', [PedidoController::class, 'index']);
