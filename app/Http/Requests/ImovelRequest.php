@@ -14,6 +14,14 @@ use Illuminate\Validation\Rule;
  */
 class ImovelRequest extends FormRequest
 {
+    /** Título, resumo, zona e cada destaque (igual a LIMITE_TEXTO no painel). */
+    public const LIMITE_TEXTO = 250;
+
+    public const MINIMO_DESCRICAO = 100;
+
+    /** Campos de "Localização e características" que o painel pode esconder do anúncio. */
+    public const CAMPOS_VISIVEIS = ['zona', 'tipologia', 'area', 'areaTotal', 'areaTerreno', 'quartos', 'casasBanho'];
+
     public function authorize(): bool
     {
         return true;
@@ -35,6 +43,13 @@ class ImovelRequest extends FormRequest
             }
         }
 
+        // Áreas: 0 no painel quer dizer "não indicada"
+        foreach (['area', 'areaTotal', 'areaTerreno'] as $campo) {
+            if ($this->has($campo) && (int) $this->input($campo) === 0) {
+                $this->merge([$campo => null]);
+            }
+        }
+
         // Linhas de destaque em branco são descartadas (o ConvertEmptyStringsToNull
         // transforma-as em null e a regra "string" recusava o imóvel inteiro)
         if (is_array($this->input('destaques'))) {
@@ -48,19 +63,22 @@ class ImovelRequest extends FormRequest
         return [
             // A referência pode repetir-se entre imóveis (ex.: frações do mesmo prédio)
             'referencia' => ['nullable', 'string', 'regex:/^[A-Z0-9-]{2,20}$/'],
-            'titulo' => ['required', 'string', 'min:4', 'max:180'],
-            'tipologia' => ['required', 'string', 'max:16'],
+            'titulo' => ['required', 'string', 'min:4', 'max:'.self::LIMITE_TEXTO],
+            'tipologia' => ['nullable', 'string', 'max:16'],
             'tipo' => ['required', Rule::in(['Apartamento', 'Moradia', 'Terreno', 'Espaço comercial', 'Outro'])],
-            'zona' => ['required', 'string', 'max:180'],
+            'zona' => ['nullable', 'string', 'max:'.self::LIMITE_TEXTO],
             'preco' => ['required', 'integer', 'min:1'],
-            'area' => ['required', 'integer', 'min:1'],
-            'quartos' => ['required', 'integer', 'min:0', 'max:50'],
-            'casasBanho' => ['required', 'integer', 'min:0', 'max:50'],
+            'area' => ['nullable', 'integer', 'min:1'],
+            'areaTerreno' => ['nullable', 'integer', 'min:1'],
+            'quartos' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'casasBanho' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'visibilidade' => ['nullable', 'array:'.implode(',', self::CAMPOS_VISIVEIS)],
+            'visibilidade.*' => ['boolean'],
             'estado' => ['required', Rule::in(['Disponível', 'Reservado', 'Vendido'])],
-            'resumo' => ['required', 'string', 'max:500'],
-            'descricao' => ['required', 'string', 'min:20', 'max:8000'],
+            'resumo' => ['required', 'string', 'max:'.self::LIMITE_TEXTO],
+            'descricao' => ['required', 'string', 'min:'.self::MINIMO_DESCRICAO, 'max:10000'],
             'destaques' => ['nullable', 'array', 'max:20'],
-            'destaques.*' => ['string', 'max:180'],
+            'destaques.*' => ['string', 'max:'.self::LIMITE_TEXTO],
             'imagens' => ['nullable', 'array', 'max:6'],
             'imagens.*' => ['string', 'max:500'],
             'publicado' => ['sometimes', 'boolean'],
@@ -96,29 +114,28 @@ class ImovelRequest extends FormRequest
 
             'titulo.required' => 'Escreva o título do imóvel.',
             'titulo.min' => 'O título precisa de pelo menos 4 caracteres.',
-            'titulo.max' => 'O título pode ter no máximo 180 caracteres.',
+            'titulo.max' => 'O título pode ter no máximo '.self::LIMITE_TEXTO.' caracteres.',
 
-            'tipologia.required' => 'Escolha a tipologia (T0 a T6+).',
             'tipo.required' => 'Escolha o tipo de imóvel.',
             'tipo.in' => 'Tipo de imóvel inválido. Escolha uma das opções da lista.',
 
-            'zona.required' => 'Indique a localização (ex.: Benfica, Lisboa).',
-            'zona.max' => 'A localização pode ter no máximo 180 caracteres.',
+            'zona.max' => 'A localização pode ter no máximo '.self::LIMITE_TEXTO.' caracteres.',
 
             'preco.required' => 'Indique o preço em euros.',
             'preco.integer' => 'O preço tem de ser um número inteiro, sem cêntimos.',
             'preco.min' => 'O preço tem de ser maior que zero.',
 
-            'area.required' => 'Indique a área útil em m².',
-            'area.integer' => 'A área tem de ser um número inteiro.',
+            'area.integer' => 'A área útil tem de ser um número inteiro.',
             'area.min' => 'A área útil tem de ser maior que zero.',
+            'areaTerreno.integer' => 'A área de terreno tem de ser um número inteiro.',
+            'areaTerreno.min' => 'A área de terreno tem de ser maior que zero.',
+            'visibilidade.array' => 'Escolha do que aparece no anúncio inválida.',
+            'visibilidade.*.boolean' => 'Escolha do que aparece no anúncio inválida.',
 
-            'quartos.required' => 'Indique o número de quartos.',
             'quartos.integer' => 'O número de quartos tem de ser inteiro.',
             'quartos.min' => 'O número de quartos não pode ser negativo.',
             'quartos.max' => 'No máximo 50 quartos.',
 
-            'casasBanho.required' => 'Indique o número de casas de banho.',
             'casasBanho.integer' => 'O número de casas de banho tem de ser inteiro.',
             'casasBanho.min' => 'O número de casas de banho não pode ser negativo.',
             'casasBanho.max' => 'No máximo 50 casas de banho.',
@@ -127,16 +144,16 @@ class ImovelRequest extends FormRequest
             'estado.in' => 'Estado inválido. Escolha Disponível, Reservado ou Vendido.',
 
             'resumo.required' => 'Escreva o resumo que aparece no card.',
-            'resumo.max' => 'O resumo pode ter no máximo 500 caracteres.',
+            'resumo.max' => 'O resumo pode ter no máximo '.self::LIMITE_TEXTO.' caracteres.',
 
             'descricao.required' => 'Escreva a descrição do imóvel.',
-            'descricao.min' => 'A descrição precisa de pelo menos 20 caracteres.',
-            'descricao.max' => 'A descrição pode ter no máximo 8000 caracteres.',
+            'descricao.min' => 'A descrição precisa de pelo menos '.self::MINIMO_DESCRICAO.' caracteres.',
+            'descricao.max' => 'A descrição pode ter no máximo 10000 caracteres.',
 
             'destaques.array' => 'Os destaques têm de ser uma lista.',
             'destaques.max' => 'No máximo 20 destaques.',
             'destaques.*.string' => 'Cada destaque tem de ser um texto.',
-            'destaques.*.max' => 'Cada destaque pode ter no máximo 180 caracteres.',
+            'destaques.*.max' => 'Cada destaque pode ter no máximo '.self::LIMITE_TEXTO.' caracteres.',
 
             'imagens.array' => 'As fotos têm de ser uma lista.',
             'imagens.max' => 'Cada imóvel pode ter no máximo 6 fotos.',
@@ -148,8 +165,8 @@ class ImovelRequest extends FormRequest
             'finalidade.in' => 'Finalidade inválida. Use venda ou arrendamento.',
             'moeda.string' => 'Moeda inválida. Use um código de 3 letras (ex.: EUR).',
             'moeda.size' => 'Moeda inválida. Use um código de 3 letras (ex.: EUR).',
-            'areaTotal.integer' => 'A área total tem de ser um número inteiro.',
-            'areaTotal.min' => 'A área total tem de ser maior que zero.',
+            'areaTotal.integer' => 'A área bruta tem de ser um número inteiro.',
+            'areaTotal.min' => 'A área bruta tem de ser maior que zero.',
             'vagas.integer' => 'O número de lugares de garagem tem de ser inteiro.',
             'vagas.min' => 'O número de lugares de garagem não pode ser negativo.',
             'destaque.boolean' => 'Valor de destaque inválido.',

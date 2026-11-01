@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Requests\ImovelRequest;
 use App\Models\Imovel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -16,22 +17,29 @@ class ImovelResource extends JsonResource
             'slug' => $this->slug,
             'referencia' => $this->referencia,
             'titulo' => $this->titulo,
-            'tipologia' => $this->tipologia,
+            'tipologia' => $this->tipologia ?? '',
             'tipo' => $this->tipo,
             'finalidade' => $this->finalidade ?? 'venda',
             'preco' => (int) $this->preco,
             'moeda' => $this->moeda ?? 'EUR',
-            'zona' => $this->zona,
+            'zona' => $this->zona ?? '',
             'endereco' => $this->endereco,
             'cidade' => $this->cidade,
             'distrito' => $this->distrito,
             'pais' => $this->pais ?? 'Portugal',
             'codigoPostal' => $this->codigo_postal,
+            // Áreas: 0 = não indicada (o site e o painel escondem-na)
             'area' => (int) $this->area,
-            'areaTotal' => $this->area_total,
+            'areaTotal' => (int) $this->area_total,
+            'areaTerreno' => (int) $this->area_terreno,
             'quartos' => (int) $this->quartos,
             'casasBanho' => (int) $this->casas_banho,
             'vagas' => $this->vagas,
+            // O que aparece no anúncio; campo sem escolha guardada aparece
+            'visibilidade' => (object) array_merge(
+                array_fill_keys(ImovelRequest::CAMPOS_VISIVEIS, true),
+                array_map('boolval', $this->visibilidade ?? []),
+            ),
             'estado' => $this->estado,
             'resumo' => $this->resumo,
             'descricao' => $this->descricao,

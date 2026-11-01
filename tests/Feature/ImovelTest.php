@@ -163,7 +163,7 @@ class ImovelTest extends TestCase
         $this->postJson('/api/v1/imoveis', $this->dados(['preco' => 0, 'descricao' => 'curta', 'referencia' => 'JD 1']))
             ->assertUnprocessable()
             ->assertJsonPath('errors.preco.0', 'O preço tem de ser maior que zero.')
-            ->assertJsonPath('errors.descricao.0', 'A descrição precisa de pelo menos 20 caracteres.')
+            ->assertJsonPath('errors.descricao.0', 'A descrição precisa de pelo menos 100 caracteres.')
             ->assertJsonPath('errors.referencia.0', 'A referência só pode ter letras, números e hífen, entre 2 e 20 caracteres (ex.: JD-006).');
     }
 
@@ -314,7 +314,7 @@ class ImovelTest extends TestCase
             'casasBanho' => 1,
             'estado' => 'Disponível',
             'resumo' => 'Apartamento luminoso com varanda.',
-            'descricao' => 'Descrição completa do imóvel com mais de vinte caracteres.',
+            'descricao' => 'Descrição completa do imóvel, com todas as divisões, acabamentos, exposição solar e acessos, para passar dos cem caracteres.',
             'destaques' => ['Varanda'],
             'imagens' => ['imoveis/capa.jpg'],
             'publicado' => true,

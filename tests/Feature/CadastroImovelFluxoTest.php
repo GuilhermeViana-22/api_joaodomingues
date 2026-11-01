@@ -131,21 +131,21 @@ class CadastroImovelFluxoTest extends TestCase
             'preço zero' => [['preco' => 0], 'preco'],
             'preço com texto' => [['preco' => 'muito'], 'preco'],
             'preço decimal' => [['preco' => 1500.5], 'preco'],
-            'área zero' => [['area' => 0], 'area'],
+            'área negativa' => [['area' => -5], 'area'],
+            'título longo' => [['titulo' => str_repeat('a', 251)], 'titulo'],
+            'visibilidade de campo desconhecido' => [['visibilidade' => ['preco' => false]], 'visibilidade'],
             'quartos negativos' => [['quartos' => -1], 'quartos'],
             'casas de banho a mais' => [['casasBanho' => 99], 'casasBanho'],
-            'zona vazia' => [['zona' => ''], 'zona'],
             'resumo vazio' => [['resumo' => ''], 'resumo'],
             'descrição curta' => [['descricao' => 'curta'], 'descricao'],
             'referência com espaço' => [['referencia' => 'JD 1'], 'referencia'],
             'tipo desconhecido' => [['tipo' => 'Castelo'], 'tipo'],
             'estado desconhecido' => [['estado' => 'Alugado'], 'estado'],
-            'tipologia vazia' => [['tipologia' => ''], 'tipologia'],
             'sete fotos' => [['imagens' => array_fill(0, 7, 'imoveis/x.jpg')], 'imagens'],
             'publicar sem foto' => [['publicado' => true, 'imagens' => []], 'imagens'],
             'finalidade desconhecida' => [['finalidade' => 'troca'], 'finalidade'],
             'moeda longa' => [['moeda' => 'EUROS'], 'moeda'],
-            'destaque longo' => [['destaques' => [str_repeat('a', 200)]], 'destaques.0'],
+            'destaque longo' => [['destaques' => [str_repeat('a', 251)]], 'destaques.0'],
         ];
     }
 
@@ -167,6 +167,57 @@ class CadastroImovelFluxoTest extends TestCase
      *
      * @param  array<string, mixed>  $extra
      */
+    public function test_armazem_sem_tipologia_nem_quartos_e_com_campos_escondidos(): void
+    {
+        $dados = $this->novo([
+            'titulo' => 'Armazém com cais de carga',
+            'tipo' => 'Espaço comercial',
+            'tipologia' => '',
+            'zona' => '',
+            'area' => 0,
+            'quartos' => null,
+            'casasBanho' => 1,
+            'areaTotal' => 1200,
+            'areaTerreno' => 3500,
+            'visibilidade' => ['casasBanho' => false, 'zona' => false],
+        ]);
+        unset($dados['quartos']);
+
+        $criado = $this->postJson('/api/v1/imoveis', $dados)
+            ->assertCreated()
+            ->assertJsonPath('tipologia', '')
+            ->assertJsonPath('zona', '')
+            ->assertJsonPath('area', 0)
+            ->assertJsonPath('quartos', 0)
+            ->assertJsonPath('areaTotal', 1200)
+            ->assertJsonPath('areaTerreno', 3500)
+            ->assertJsonPath('visibilidade.casasBanho', false)
+            ->assertJsonPath('visibilidade.zona', false)
+            ->assertJsonPath('visibilidade.areaTerreno', true)
+            ->json();
+
+        $this->assertDatabaseHas('imoveis', ['id' => $criado['id'], 'tipologia' => null, 'zona' => null, 'area' => null, 'area_terreno' => 3500]);
+
+        // Ida e volta com a resposta tal como veio (visibilidade completa, áreas a 0)
+        $this->putJson('/api/v1/imoveis/'.$criado['id'], $criado)
+            ->assertOk()
+            ->assertJsonPath('visibilidade.casasBanho', false)
+            ->assertJsonPath('area', 0);
+    }
+
+    public function test_textos_ate_250_e_descricao_com_minimo_de_100(): void
+    {
+        $this->postJson('/api/v1/imoveis', $this->novo([
+            'titulo' => str_repeat('a', 250),
+            'resumo' => str_repeat('b', 250),
+            'destaques' => [str_repeat('c', 250)],
+        ]))->assertCreated();
+
+        $this->postJson('/api/v1/imoveis', $this->novo(['descricao' => str_repeat('d', 99)]))
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.descricao.0', 'A descrição precisa de pelo menos 100 caracteres.');
+    }
+
     private function novo(array $extra = []): array
     {
         return array_merge([
@@ -181,7 +232,7 @@ class CadastroImovelFluxoTest extends TestCase
             'casasBanho' => 1,
             'estado' => 'Disponível',
             'resumo' => 'Luminoso, renovado e perto do metro.',
-            'descricao' => 'Apartamento remodelado, com cozinha equipada e varanda.',
+            'descricao' => 'Apartamento remodelado, com cozinha equipada e varanda, muita luz natural, perto do metro e de todo o comércio local.',
             'destaques' => ['Varanda'],
             'imagens' => [],
             'publicado' => false,

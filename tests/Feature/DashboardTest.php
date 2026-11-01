@@ -72,7 +72,7 @@ class DashboardTest extends TestCase
             'casasBanho' => 1,
             'estado' => 'Disponível',
             'resumo' => 'Apartamento luminoso com varanda.',
-            'descricao' => 'Descrição completa do imóvel com mais de vinte caracteres.',
+            'descricao' => 'Descrição completa do imóvel, com todas as divisões, acabamentos, exposição solar e acessos, para passar dos cem caracteres.',
             'imagens' => $publicado ? ['imoveis/capa.jpg'] : [],
             'publicado' => $publicado,
             'referencia' => $referencia,
