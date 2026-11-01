@@ -32,4 +32,12 @@ php artisan db:seed --class=UtilizadoresSeeder --force --no-interaction
     done
 ) &
 
+# Agendador (routes/console.php): imoveis:traduzir a cada 6h.
+(
+    while true; do
+        php artisan schedule:work
+        sleep 3
+    done
+) &
+
 exec php artisan serve --host=0.0.0.0 --port=8048 --no-reload

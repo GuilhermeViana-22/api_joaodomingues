@@ -22,7 +22,7 @@ class PedidoRequest extends FormRequest
             'tipologia' => ['nullable', 'string', 'max:40'],
             'zona' => ['nullable', 'string', 'max:180'],
             'prazo' => ['nullable', 'string', 'max:180'],
-            'mensagem' => ['nullable', 'string', 'max:5000'],
+            'mensagem' => ['required', 'string', 'min:3', 'max:5000'],
             'imovelId' => ['nullable', 'string', 'max:80'],
             'consentimento' => ['nullable'],
             'website' => ['nullable', function (string $attribute, mixed $value, \Closure $fail) {
@@ -40,6 +40,8 @@ class PedidoRequest extends FormRequest
             'nome.min' => 'Indique o nome.',
             'email.required' => 'Indique um e-mail válido.',
             'email.email' => 'Indique um e-mail válido.',
+            'mensagem.required' => 'Escreva uma mensagem com pelo menos 3 caracteres.',
+            'mensagem.min' => 'Escreva uma mensagem com pelo menos 3 caracteres.',
         ];
     }
 }

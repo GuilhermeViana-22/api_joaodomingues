@@ -28,6 +28,7 @@ class DashboardTest extends TestCase
         $this->postJson('/api/v1/pedidos', [
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
+            'mensagem' => 'Quero vender.',
             'objetivo' => 'Vender o meu imóvel',
             'tipoImovel' => 'Apartamento',
             'imovelId' => $publicado,
@@ -36,6 +37,7 @@ class DashboardTest extends TestCase
         $antigo = $this->postJson('/api/v1/pedidos', [
             'nome' => 'Pedro Antunes',
             'email' => 'pedro@email.pt',
+            'mensagem' => 'Quero vender.',
         ])->assertCreated()->json('id');
         Pedido::query()->whereKey($antigo)->update([
             'status' => 'visualizado',

@@ -78,6 +78,7 @@ class PedidoTest extends TestCase
         $this->postJson('/api/v1/pedidos', [
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
+            'mensagem' => 'Quero vender.',
         ])->assertCreated();
 
         $this->assertDatabaseHas('pedidos', [
@@ -93,6 +94,18 @@ class PedidoTest extends TestCase
         $this->postJson('/api/v1/pedidos', [
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
+        ])->assertUnprocessable()->assertJsonValidationErrors('mensagem');
+
+        $this->postJson('/api/v1/pedidos', [
+            'nome' => 'Maria Silva',
+            'email' => 'maria@email.pt',
+            'mensagem' => 'Ok',
+        ])->assertUnprocessable()->assertJsonValidationErrors('mensagem');
+
+        $this->postJson('/api/v1/pedidos', [
+            'nome' => 'Maria Silva',
+            'email' => 'maria@email.pt',
+            'mensagem' => 'Quero vender.',
             'website' => 'http://spam.test',
         ])->assertUnprocessable();
 
@@ -104,6 +117,7 @@ class PedidoTest extends TestCase
         $this->postJson('/api/v1/pedidos', [
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
+            'mensagem' => 'Quero vender.',
         ])->assertCreated();
 
         $this->getJson('/api/v1/pedidos')->assertUnauthorized();

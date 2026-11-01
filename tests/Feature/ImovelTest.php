@@ -135,6 +135,7 @@ class ImovelTest extends TestCase
         $this->postJson('/api/v1/pedidos', [
             'nome' => 'Maria Silva',
             'email' => 'maria@email.pt',
+            'mensagem' => 'Quero vender.',
             'imovelId' => $id,
         ])->assertCreated();
 
