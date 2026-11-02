@@ -41,6 +41,8 @@ class ImovelResource extends JsonResource
                 array_map('boolval', $this->visibilidade ?? []),
             ),
             'estado' => $this->estado,
+            // Vendido com false: só o painel o vê
+            'mostrarVendido' => $this->mostrar_vendido ?? true,
             'resumo' => $this->resumo,
             'descricao' => $this->descricao,
             'destaques' => $this->destaques ?? [],

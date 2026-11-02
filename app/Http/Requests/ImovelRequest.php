@@ -36,7 +36,7 @@ class ImovelRequest extends FormRequest
 
         // Campos que o painel não edita mas que podem vir a null (ex.: de uma
         // resposta antiga da API): null = "não mexer", em vez de recusar o imóvel
-        foreach (['finalidade', 'moeda', 'pais', 'destaque', 'ordem'] as $campo) {
+        foreach (['finalidade', 'moeda', 'pais', 'destaque', 'ordem', 'mostrarVendido'] as $campo) {
             if ($this->has($campo) && $this->input($campo) === null) {
                 $this->request->remove($campo);
                 $this->json()->remove($campo);
@@ -75,6 +75,8 @@ class ImovelRequest extends FormRequest
             'visibilidade' => ['nullable', 'array:'.implode(',', self::CAMPOS_VISIVEIS)],
             'visibilidade.*' => ['boolean'],
             'estado' => ['required', Rule::in(['Disponível', 'Reservado', 'Vendido'])],
+            // Só conta com estado "Vendido": false tira-o do site
+            'mostrarVendido' => ['sometimes', 'boolean'],
             'resumo' => ['required', 'string', 'max:'.self::LIMITE_TEXTO],
             'descricao' => ['required', 'string', 'min:'.self::MINIMO_DESCRICAO, 'max:10000'],
             'destaques' => ['nullable', 'array', 'max:20'],
@@ -142,6 +144,8 @@ class ImovelRequest extends FormRequest
 
             'estado.required' => 'Escolha o estado (Disponível, Reservado ou Vendido).',
             'estado.in' => 'Estado inválido. Escolha Disponível, Reservado ou Vendido.',
+
+            'mostrarVendido.boolean' => 'Escolha inválida para mostrar o imóvel vendido no site.',
 
             'resumo.required' => 'Escreva o resumo que aparece no card.',
             'resumo.max' => 'O resumo pode ter no máximo '.self::LIMITE_TEXTO.' caracteres.',

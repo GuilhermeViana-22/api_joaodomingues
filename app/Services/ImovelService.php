@@ -235,6 +235,7 @@ class ImovelService
             'areaTotal' => 'area_total',
             'areaTerreno' => 'area_terreno',
             'visibilidade' => 'visibilidade',
+            'mostrarVendido' => 'mostrar_vendido',
             'vagas' => 'vagas',
             'endereco' => 'endereco',
             'cidade' => 'cidade',
@@ -249,7 +250,7 @@ class ImovelService
 
         // Colunas NOT NULL com valor por defeito: um null aqui daria erro SQL,
         // por isso null quer dizer "deixar como está" (ou o defeito, se novo)
-        $semNull = ['finalidade', 'moeda', 'pais', 'destaque', 'ordem'];
+        $semNull = ['finalidade', 'moeda', 'pais', 'destaque', 'ordem', 'mostrar_vendido'];
 
         foreach ($opcionais as $entrada => $coluna) {
             if (! array_key_exists($entrada, $dados)) {

@@ -72,6 +72,37 @@ class ImovelTest extends TestCase
         $this->getJson('/api/v1/imoveis/jd-002')->assertOk()->assertJsonPath('publicado', false);
     }
 
+    public function test_vendido_escondido_sai_do_site_mas_fica_no_painel(): void
+    {
+        Passport::actingAs($admin = User::factory()->create(['perfil' => 'administrador']));
+        $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-001', 'estado' => 'Vendido']))
+            ->assertCreated()->assertJsonPath('mostrarVendido', true);
+        $this->postJson('/api/v1/imoveis', $this->dados([
+            'referencia' => 'JD-002',
+            'estado' => 'Vendido',
+            'mostrarVendido' => false,
+        ]))->assertCreated()->assertJsonPath('mostrarVendido', false);
+        // A escolha só conta com estado "Vendido"
+        $this->postJson('/api/v1/imoveis', $this->dados(['referencia' => 'JD-003', 'mostrarVendido' => false]))->assertCreated();
+
+        $this->app['auth']->forgetGuards();
+
+        $publico = collect($this->getJson('/api/v1/imoveis')->assertOk()->json())->pluck('referencia')->sort()->values()->all();
+        $this->assertSame(['JD-001', 'JD-003'], $publico);
+        $this->getJson('/api/v1/imoveis/jd-002')->assertNotFound();
+        $this->getJson('/api/v1/imoveis/jd-001')->assertOk()->assertJsonPath('estado', 'Vendido');
+
+        Passport::actingAs($admin);
+        $this->getJson('/api/v1/imoveis')->assertOk()->assertJsonCount(3);
+
+        // Voltar a mostrar no site
+        $this->putJson('/api/v1/imoveis/jd-002', $this->dados(['referencia' => 'JD-002', 'estado' => 'Vendido', 'mostrarVendido' => true]))
+            ->assertOk()->assertJsonPath('mostrarVendido', true);
+        // Sem o campo (ou a null), fica como estava
+        $this->putJson('/api/v1/imoveis/jd-002', $this->dados(['referencia' => 'JD-002', 'estado' => 'Vendido', 'mostrarVendido' => null]))
+            ->assertOk()->assertJsonPath('mostrarVendido', true);
+    }
+
     public function test_filtra_e_pagina(): void
     {
         Passport::actingAs(User::factory()->create(['perfil' => 'administrador']));

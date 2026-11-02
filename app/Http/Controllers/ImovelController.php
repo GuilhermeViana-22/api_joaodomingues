@@ -28,7 +28,7 @@ class ImovelController extends Controller
         $consulta = Imovel::query()->with('imagens');
 
         if ($utilizador === null) {
-            $consulta->where('publicado', true);
+            $this->soPublicos($consulta);
         } elseif ($request->has('publicado')) {
             $consulta->where('publicado', $request->boolean('publicado'));
         }
@@ -52,7 +52,8 @@ class ImovelController extends Controller
 
     public function destaque(Request $request): AnonymousResourceCollection
     {
-        $consulta = Imovel::query()->with('imagens')->where('publicado', true)->where('destaque', true);
+        $consulta = Imovel::query()->with('imagens')->where('destaque', true);
+        $this->soPublicos($consulta);
         $this->filtrar($consulta, $request);
 
         return ImovelResource::collection($consulta->orderBy('ordem')->orderByDesc('created_at')->get());
@@ -61,7 +62,7 @@ class ImovelController extends Controller
     public function show(Request $request, Imovel $imovel): ImovelResource
     {
         $utilizador = $this->gestor($request);
-        if ($utilizador === null && ! $imovel->publicado) {
+        if ($utilizador === null && ! $this->visivelNoSite($imovel)) {
             abort(404, 'O registo já não existe.');
         }
 
@@ -132,6 +133,22 @@ class ImovelController extends Controller
         ]);
 
         return response()->json(['message' => $mensagem], 500);
+    }
+
+    /**
+     * O que o site pode ver: publicados, menos os vendidos que o painel
+     * escolheu tirar da parte pública (mostrar_vendido = false).
+     */
+    private function soPublicos($consulta): void
+    {
+        $consulta->where('publicado', true)->where(function ($w) {
+            $w->where('estado', '!=', 'Vendido')->orWhere('mostrar_vendido', true);
+        });
+    }
+
+    private function visivelNoSite(Imovel $imovel): bool
+    {
+        return $imovel->publicado && ($imovel->estado !== 'Vendido' || $imovel->mostrar_vendido);
     }
 
     private function gestor(Request $request): ?User
